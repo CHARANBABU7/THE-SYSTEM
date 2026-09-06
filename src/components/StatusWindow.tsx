@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useSystem } from '../context/SystemContext';
 import { AttributeKey } from '../types';
+import { getLocalDateKey } from '../utils/dateUtils';
 
 export const StatusWindow: React.FC = () => {
   const { 
@@ -48,7 +49,7 @@ export const StatusWindow: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `hunter-system-kairos-backup-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `hunter-system-kairos-backup-${getLocalDateKey()}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -114,7 +115,7 @@ export const StatusWindow: React.FC = () => {
       key: 'int',
       label: 'INTELLIGENCE (INT)',
       icon: <Brain className="w-4 h-4 text-purple-400" />,
-      desc: 'Trained by: 2 Hours Focused Study',
+      desc: 'Trained by: 1 Hour Focused Study',
       borderStyle: 'border-purple-500/25 bg-purple-950/10',
       barColor: 'bg-purple-400',
       textColor: 'text-purple-300',

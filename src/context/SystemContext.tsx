@@ -1,8 +1,8 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { 
   PlayerProfile, 
   DailyQuestState, 
-  QuestItem,
+  QuestItem, 
   QuestType,
   FloatingXpEvent,
   HistoryEntry, 
@@ -14,7 +14,10 @@ import {
   AttributeKey,
   AttributeXPTransaction,
   PlayerAttributesXP,
-  PlayerAttributeProgressMap
+  PlayerAttributeProgressMap,
+  PenaltyState,
+  PenaltyDrillItem,
+  PenaltyLedgerEvent
 } from '../types';
 import { 
   calculateLevel, 
@@ -23,9 +26,28 @@ import {
   calculateAttributeLevel,
   calculateAttributeProgress
 } from '../utils/progression';
+import { getLocalDateKey, getMissedDateRange } from '../utils/dateUtils';
 import { sound } from '../utils/audio';
 
 const STORAGE_KEY = 'SOLO_LEVELING_QUEST_V3';
+
+export const getDefaultPenaltyDrills = (): PenaltyDrillItem[] => [
+  { id: 'pushups', name: 'Emergency Push-ups', category: 'physical', target: 50, current: 0, unit: 'reps', icon: '💪' },
+  { id: 'squats', name: 'Emergency Squats', category: 'physical', target: 50, current: 0, unit: 'reps', icon: '🦵' },
+  { id: 'situps', name: 'Emergency Sit-ups', category: 'physical', target: 30, current: 0, unit: 'reps', icon: '🧘' },
+  { id: 'pullups', name: 'Emergency Pull-ups', category: 'physical', target: 10, current: 0, unit: 'reps', icon: '🧗' },
+  { id: 'plank', name: '2-Minute Plank', category: 'physical', target: 120, current: 0, unit: 'seconds', icon: '⏱️' },
+  { id: 'steps', name: 'Emergency Steps', category: 'physical', target: 2000, current: 0, unit: 'steps', icon: '🏃' },
+  { id: 'study', name: 'Focused Discipline Study', category: 'discipline', target: 18, current: 0, unit: 'minutes', icon: '🧠' },
+];
+
+const INITIAL_PENALTY_STATE: PenaltyState = {
+  isActive: false,
+  startTimestamp: null,
+  endTimestamp: null,
+  triggerDate: null,
+  drills: getDefaultPenaltyDrills(),
+};
 
 const INITIAL_PROFILE: PlayerProfile = {
   name: 'Charan Babu',
@@ -139,7 +161,7 @@ const getInitialDailyQuests = (): QuestItem[] => [
     id: 'study',
     name: 'Focused Study',
     category: 'study',
-    target: 120, // 2 hours = 120 minutes
+    target: 60, // 1 hour = 60 minutes
     current: 0,
     unit: 'minutes',
     icon: '🧠',
@@ -150,17 +172,14 @@ const getInitialDailyQuests = (): QuestItem[] => [
   },
 ];
 
-const getInitialDailyQuestState = (): DailyQuestState => {
-  const today = new Date().toISOString().split('T')[0];
-  return {
-    date: today,
-    quests: getInitialDailyQuests(),
-    isAllCompleted: false,
-    completionBonusClaimed: false,
-    completionBonusXp: 300,
-    isRestDay: false,
-  };
-};
+const getInitialDailyQuestState = (dateStr: string = getLocalDateKey()): DailyQuestState => ({
+  date: dateStr,
+  quests: getInitialDailyQuests(),
+  isAllCompleted: false,
+  completionBonusClaimed: false,
+  completionBonusXp: 300,
+  isRestDay: false,
+});
 
 const getStoredData = () => {
   try {
@@ -184,11 +203,11 @@ interface SystemContextType {
   history: HistoryEntry[];
   xpTransactions: XPTransaction[];
   attributeTransactions: AttributeXPTransaction[];
+  penaltyLedger: PenaltyLedgerEvent[];
+  penaltyState: PenaltyState;
   notifications: SystemNotification[];
   floatingXp: FloatingXpEvent[];
   levelProgress: LevelProgress;
-  penaltyActive: boolean;
-  penaltySecondsLeft: number;
   isMuted: boolean;
 
   // Actions
@@ -196,33 +215,62 @@ interface SystemContextType {
   awardXP: (amount: number, source: XPSource | string, date: string, label?: string) => boolean;
   awardAttributeXP: (attribute: AttributeKey, amount: number, source: string, date: string, label?: string) => boolean;
   addQuestProgress: (questId: QuestType, amount: number) => void;
+  updatePenaltyDrillProgress: (drillId: string, amount: number) => void;
   claimDailyCompletionBonus: () => void;
   activateRestDay: () => boolean;
   exportData: () => string;
   importData: (jsonStr: string) => boolean;
   updateProfileName: (name: string, alias: string) => void;
-  triggerPenaltyZone: () => void;
-  clearPenaltyZone: () => void;
+  triggerManualPenaltyZone: () => void;
+  clearPenaltyZone: () => boolean;
   addNotification: (title: string, message: string, type: SystemNotification['type']) => void;
   dismissNotification: (id: string) => void;
   dismissFloatingXp: (id: string) => void;
-  resetTodayQuests: () => void;
 }
 
 const SystemContext = createContext<SystemContextType | undefined>(undefined);
 
 export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activeTab, setActiveTab] = useState<TabType>('quest');
+  const todayKey = getLocalDateKey();
 
-  // Synchronous initial state restoration from localStorage
+  // 1. Synchronous initial state restoration from localStorage
   const [xpTransactions, setXpTransactions] = useState<XPTransaction[]>(() => {
     const saved = getStoredData();
-    return saved?.xpTransactions ? saved.xpTransactions : [];
+    return Array.isArray(saved?.xpTransactions) ? saved.xpTransactions : [];
   });
 
   const [attributeTransactions, setAttributeTransactions] = useState<AttributeXPTransaction[]>(() => {
     const saved = getStoredData();
-    return saved?.attributeTransactions ? saved.attributeTransactions : [];
+    return Array.isArray(saved?.attributeTransactions) ? saved.attributeTransactions : [];
+  });
+
+  const [penaltyLedger, setPenaltyLedger] = useState<PenaltyLedgerEvent[]>(() => {
+    const saved = getStoredData();
+    return Array.isArray(saved?.penaltyLedger) ? saved.penaltyLedger : [];
+  });
+
+  const [penaltyState, setPenaltyState] = useState<PenaltyState>(() => {
+    const saved = getStoredData();
+    if (saved?.penaltyState && typeof saved.penaltyState === 'object') {
+      const ps = saved.penaltyState;
+      if (ps.isActive) {
+        return {
+          isActive: true,
+          startTimestamp: ps.startTimestamp || Date.now(),
+          endTimestamp: null,
+          triggerDate: ps.triggerDate || todayKey,
+          drills: Array.isArray(ps.drills) && ps.drills.length === 7
+            ? ps.drills.map((d: PenaltyDrillItem) => {
+                if (d.id === 'steps' && d.target === 5000) return { ...d, target: 2000 };
+                if (d.id === 'study' && (d.target === 30 || d.target === 120)) return { ...d, target: 18 };
+                return d;
+              })
+            : getDefaultPenaltyDrills(),
+        };
+      }
+    }
+    return INITIAL_PENALTY_STATE;
   });
 
   const [attributeXP, setAttributeXP] = useState<PlayerAttributesXP>(() => {
@@ -235,6 +283,7 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const [profile, setProfile] = useState<PlayerProfile>(() => {
     const saved = getStoredData();
+    const ledgerCount = Array.isArray(saved?.penaltyLedger) ? saved.penaltyLedger.length : 0;
     if (saved?.profile) {
       const totalXP = typeof saved.profile.totalXP === 'number' ? saved.profile.totalXP : (saved.profile.xp || 0);
       const currentLevel = calculateLevel(totalXP);
@@ -245,31 +294,35 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         totalXP,
         currentLevel,
         rank,
+        penaltyCount: Math.max(saved.profile.penaltyCount || 0, ledgerCount),
       };
     }
-    return INITIAL_PROFILE;
-  });
-
-  const [dailyQuest, setDailyQuest] = useState<DailyQuestState>(() => {
-    const saved = getStoredData();
-    const today = new Date().toISOString().split('T')[0];
-    if (saved?.dailyQuest && saved.dailyQuest.date === today && saved.dailyQuest.quests?.length === 7) {
-      const updatedQuests = saved.dailyQuest.quests.map((q: QuestItem) => {
-        if (q.id === 'pullups') return { ...q, xpReward: 75, attributeXpReward: 75, attributeBonus: 'str' as AttributeKey };
-        if (q.id === 'study') return { ...q, xpReward: 75, attributeXpReward: 75, attributeBonus: 'int' as AttributeKey };
-        if (q.id === 'pushups' || q.id === 'squats') return { ...q, xpReward: 50, attributeXpReward: 50, attributeBonus: 'str' as AttributeKey };
-        if (q.id === 'situps' || q.id === 'plank') return { ...q, xpReward: 50, attributeXpReward: 50, attributeBonus: 'vit' as AttributeKey };
-        if (q.id === 'steps') return { ...q, xpReward: 50, attributeXpReward: 50, attributeBonus: 'agi' as AttributeKey };
-        return q;
-      });
-      return { ...saved.dailyQuest, quests: updatedQuests };
-    }
-    return getInitialDailyQuestState();
+    return { ...INITIAL_PROFILE, penaltyCount: ledgerCount };
   });
 
   const [history, setHistory] = useState<HistoryEntry[]>(() => {
     const saved = getStoredData();
-    return saved?.history ? saved.history : [];
+    return Array.isArray(saved?.history) ? saved.history : [];
+  });
+
+  const [dailyQuest, setDailyQuest] = useState<DailyQuestState>(() => {
+    const saved = getStoredData();
+    if (saved?.dailyQuest && saved.dailyQuest.date === todayKey && Array.isArray(saved.dailyQuest.quests) && saved.dailyQuest.quests.length === 7) {
+      const normalizedQuests = saved.dailyQuest.quests.map((q: QuestItem) => {
+        if (q.id === 'study') {
+          const isCompleted = q.current >= 60;
+          return { ...q, target: 60, isCompleted };
+        }
+        return q;
+      });
+      const isAllCompleted = normalizedQuests.every((q: QuestItem) => q.isCompleted);
+      return {
+        ...saved.dailyQuest,
+        quests: normalizedQuests,
+        isAllCompleted: isAllCompleted || saved.dailyQuest.isAllCompleted,
+      };
+    }
+    return getInitialDailyQuestState(todayKey);
   });
 
   const [floatingXp, setFloatingXp] = useState<FloatingXpEvent[]>([]);
@@ -277,16 +330,14 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     {
       id: 'welcome-notif',
       title: 'SYSTEM ACTIVATED',
-      message: 'Welcome Hunter Charan "Kairos" Babu. Daily conditioning quest is ready.',
+      message: 'Welcome Hunter Charan "Kairos" Babu. Daily conditioning protocols active.',
       type: 'quest',
       timestamp: new Date().toLocaleTimeString(),
     },
   ]);
-  const [penaltyActive, setPenaltyActive] = useState<boolean>(false);
-  const [penaltySecondsLeft, setPenaltySecondsLeft] = useState<number>(14400); // 4 hours
   const [isMuted, setIsMuted] = useState<boolean>(false);
 
-  // Calculate dynamic level progress for Hunter and each individual Attribute
+  // Dynamic calculations
   const levelProgress = calculateLevelProgress(profile.totalXP);
 
   const attributeProgress: PlayerAttributeProgressMap = {
@@ -307,72 +358,119 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         history,
         xpTransactions,
         attributeTransactions,
+        penaltyLedger,
+        penaltyState,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
     } catch (e) {
       console.error('Failed to save to localStorage', e);
     }
-  }, [profile, attributeXP, dailyQuest, history, xpTransactions, attributeTransactions]);
+  }, [profile, attributeXP, dailyQuest, history, xpTransactions, attributeTransactions, penaltyLedger, penaltyState]);
 
-  // Midnight Date Checker
-  useEffect(() => {
-    const checkMidnightReset = () => {
-      const today = new Date().toISOString().split('T')[0];
-
-      if (dailyQuest.date !== today) {
-        if (dailyQuest.isRestDay) {
-          sound.playQuestComplete();
-          addNotification(
-            'REST DAY CONCLUDED',
-            'Recovery period complete. Welcome back, Hunter. A new daily quest has arrived.',
-            'info'
-          );
-        } else if (!dailyQuest.isAllCompleted) {
-          sound.playPenaltySiren();
-          setPenaltyActive(true);
-          setPenaltySecondsLeft(14400);
-          setProfile(p => ({
-            ...p,
-            streakDays: 0,
-            penaltyCount: p.penaltyCount + 1,
-          }));
-          addNotification(
-            'PENALTY ZONE ACTIVATED',
-            'Midnight passed without completing all 7 daily quests! Penalty Zone survival initiated.',
-            'penalty'
-          );
-        } else {
-          sound.playQuestComplete();
-          addNotification(
-            'NEW DAILY QUEST ARRIVED',
-            'A new day has arrived. Daily conditioning protocols have reset to 0.',
-            'quest'
-          );
-        }
-
-        setDailyQuest(getInitialDailyQuestState());
-      }
+  const addNotification = useCallback((title: string, message: string, type: SystemNotification['type']) => {
+    sound.playSystemChime();
+    const newNotif: SystemNotification = {
+      id: `notif-${Date.now()}-${Math.random()}`,
+      title,
+      message,
+      type,
+      timestamp: new Date().toLocaleTimeString(),
     };
+    setNotifications(prev => [newNotif, ...prev].slice(0, 5));
+  }, []);
 
-    const interval = setInterval(checkMidnightReset, 15000);
-    window.addEventListener('focus', checkMidnightReset);
+  /**
+   * CORE PENALTY ENGINE: Multi-Day Missed Gap Detection & Idempotent Rollover
+   * Guarantees:
+   * 1. Exactly ONE penalty event per missed active day (penalty:YYYY-MM-DD).
+   * 2. No missed day is lost even if the user opens the app days later.
+   * 3. Rest-day and Shield-protected days are never penalized.
+   * 4. Idempotent across reloads, remounts, and double executions.
+   */
+  const processMissedDaysAndRollover = useCallback(() => {
+    const currentLocalToday = getLocalDateKey();
+
+    if (dailyQuest.date < currentLocalToday) {
+      const missedRange = getMissedDateRange(dailyQuest.date, currentLocalToday);
+      const newPenaltyLedgerEvents: PenaltyLedgerEvent[] = [];
+      let activatedPenalty = false;
+      let lastTriggerDate = '';
+
+      missedRange.forEach(dateKey => {
+        const isHistoricalRestDay = history.some(h => h.date === dateKey && h.isRestDay);
+        const isHistoricalCompleted = history.some(h => h.date === dateKey && h.completed);
+        const isCurrentQuestDay = dateKey === dailyQuest.date;
+        const isCurrentQuestSafe = isCurrentQuestDay && (dailyQuest.isAllCompleted || dailyQuest.isRestDay);
+
+        // A day was missed ONLY if it was NOT completed and NOT a rest day
+        if (!isHistoricalRestDay && !isHistoricalCompleted && !isCurrentQuestSafe) {
+          const penaltyId = `penalty:${dateKey}`;
+          const alreadyInLedger = penaltyLedger.some(e => e.id === penaltyId) || newPenaltyLedgerEvents.some(e => e.id === penaltyId);
+
+          if (!alreadyInLedger) {
+            newPenaltyLedgerEvents.push({
+              id: penaltyId,
+              date: dateKey,
+              timestamp: Date.now(),
+              reason: 'Daily conditioning quest incomplete at day boundary',
+            });
+            activatedPenalty = true;
+            lastTriggerDate = dateKey;
+          }
+        }
+      });
+
+      // Update Penalty Ledger & Profile if new penalties occurred
+      if (newPenaltyLedgerEvents.length > 0) {
+        sound.playPenaltySiren();
+        setPenaltyLedger(prev => [...newPenaltyLedgerEvents, ...prev]);
+
+        setProfile(p => ({
+          ...p,
+          streakDays: 0, // Reset streak on missed day
+          penaltyCount: p.penaltyCount + newPenaltyLedgerEvents.length,
+        }));
+
+        // Enforce active penalty state (escapable ONLY via 100% drill completion)
+        setPenaltyState({
+          isActive: true,
+          startTimestamp: Date.now(),
+          endTimestamp: null,
+          triggerDate: lastTriggerDate,
+          drills: getDefaultPenaltyDrills(),
+        });
+
+        addNotification(
+          'PENALTY ZONE ACTIVATED',
+          `${newPenaltyLedgerEvents.length} missed day(s) detected! Complete all 7 redemption drills to survive.`,
+          'penalty'
+        );
+      } else {
+        // Safe rollover (e.g. yesterday was completed or rest day)
+        sound.playQuestComplete();
+        addNotification(
+          'NEW DAILY QUEST ARRIVED',
+          'Welcome to a new day, Hunter. Daily conditioning protocols have reset.',
+          'quest'
+        );
+      }
+
+      // Initialize clean 0-progress daily quest sheet for today
+      setDailyQuest(getInitialDailyQuestState(currentLocalToday));
+    }
+  }, [dailyQuest, history, penaltyLedger, addNotification]);
+
+  // Periodic and on-focus rollover check
+  useEffect(() => {
+    processMissedDaysAndRollover();
+    const interval = setInterval(processMissedDaysAndRollover, 15000);
+    window.addEventListener('focus', processMissedDaysAndRollover);
 
     return () => {
       clearInterval(interval);
-      window.removeEventListener('focus', checkMidnightReset);
+      window.removeEventListener('focus', processMissedDaysAndRollover);
     };
-  }, [dailyQuest]);
-
-  // Penalty timer interval
-  useEffect(() => {
-    let timer: ReturnType<typeof setInterval>;
-    if (penaltyActive && penaltySecondsLeft > 0) {
-      timer = setInterval(() => {
-        setPenaltySecondsLeft(prev => (prev <= 1 ? 0 : prev - 1));
-      }, 1000);
-    }
-    return () => clearInterval(timer);
-  }, [penaltyActive, penaltySecondsLeft]);
+  }, [processMissedDaysAndRollover]);
 
   const toggleMute = () => {
     const nextMute = !isMuted;
@@ -400,18 +498,6 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setFloatingXp(prev => prev.filter(e => e.id !== id));
   };
 
-  const addNotification = (title: string, message: string, type: SystemNotification['type']) => {
-    sound.playSystemChime();
-    const newNotif: SystemNotification = {
-      id: `notif-${Date.now()}-${Math.random()}`,
-      title,
-      message,
-      type,
-      timestamp: new Date().toLocaleTimeString(),
-    };
-    setNotifications(prev => [newNotif, ...prev].slice(0, 5));
-  };
-
   const dismissNotification = (id: string) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
   };
@@ -422,10 +508,10 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   /**
-   * 1. Centralized Global XP Engine
+   * 1. Global Hunter XP Engine (Idempotent)
    */
   const awardXP = (amount: number, source: XPSource | string, date: string, label: string = 'Quest'): boolean => {
-    if (amount <= 0) return false;
+    if (amount <= 0 || penaltyState.isActive) return false;
 
     const alreadyAwarded = xpTransactions.some(t => t.date === date && t.source === source);
     if (alreadyAwarded) {
@@ -451,9 +537,7 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const newLevel = calculateLevel(newTotalXP);
 
       if (newLevel > oldLevel) {
-        const levelsGained = newLevel - oldLevel;
         sound.playLevelUp();
-
         setTimeout(() => {
           addNotification(
             'HUNTER LEVEL UP!',
@@ -477,8 +561,7 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   /**
-   * 2. Centralized Attribute XP & Leveling Engine
-   * Enforces idempotency per (date, source) and processes level-up thresholds
+   * 2. Attribute XP Engine (Idempotent)
    */
   const awardAttributeXP = (
     attribute: AttributeKey, 
@@ -487,9 +570,8 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     date: string, 
     label: string = 'Attribute'
   ): boolean => {
-    if (amount <= 0) return false;
+    if (amount <= 0 || penaltyState.isActive) return false;
 
-    // Check transaction ledger: prevent duplicate attribute rewards
     const alreadyAwarded = attributeTransactions.some(t => t.date === date && t.source === source);
     if (alreadyAwarded) {
       return false;
@@ -537,10 +619,10 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Cumulative progress accumulator
   const addQuestProgress = (questId: QuestType, amount: number) => {
-    if (amount <= 0 || dailyQuest.isRestDay) return;
+    if (amount <= 0 || dailyQuest.isRestDay || penaltyState.isActive) return;
     sound.playStatPoint();
 
-    // 1. Update lifetime physical/study metrics
+    // 1. Update lifetime metrics
     setProfile(prev => {
       const updated = { ...prev };
       if (questId === 'pushups') updated.lifetimePushups += amount;
@@ -553,7 +635,7 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return updated;
     });
 
-    // 2. Accumulate progress on the daily quest
+    // 2. Accumulate progress on daily quest
     setDailyQuest(prev => {
       let newlyCompletedQuest: QuestItem | null = null;
 
@@ -577,19 +659,14 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       const allDone = updatedQuests.every(q => q.isCompleted);
 
-      // If this specific quest was just completed today:
-      // Award Global XP AND Attribute XP
+      // Award XP on 100% completion
       if (newlyCompletedQuest) {
         const quest = newlyCompletedQuest as QuestItem;
         const globalSourceKey: XPSource = `quest_${quest.id}` as XPSource;
         const attrSourceKey = `attribute_${quest.attributeBonus}_${quest.id}_${prev.date}`;
 
         sound.playQuestComplete();
-
-        // 1. Global Hunter XP
         awardXP(quest.xpReward, globalSourceKey, prev.date, quest.name);
-
-        // 2. Individual Attribute XP
         awardAttributeXP(
           quest.attributeBonus, 
           quest.attributeXpReward, 
@@ -607,7 +684,6 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }, 200);
       }
 
-      // If ALL 7 quests are completed, trigger Perfect Day readiness
       if (allDone && !prev.isAllCompleted) {
         sound.playLevelUp();
         setTimeout(() => {
@@ -627,8 +703,34 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
   };
 
+  /**
+   * Penalty Drill Progress Updater
+   * Survives page refresh and does NOT award normal XP
+   */
+  const updatePenaltyDrillProgress = (drillId: string, amount: number) => {
+    if (amount <= 0 || !penaltyState.isActive) return;
+    sound.playStatPoint();
+
+    setPenaltyState(prev => {
+      const updatedDrills = prev.drills.map(d => {
+        if (d.id === drillId) {
+          return {
+            ...d,
+            current: Math.min(d.target, d.current + amount),
+          };
+        }
+        return d;
+      });
+
+      return {
+        ...prev,
+        drills: updatedDrills,
+      };
+    });
+  };
+
   const claimDailyCompletionBonus = () => {
-    if (!dailyQuest.isAllCompleted || dailyQuest.completionBonusClaimed) return;
+    if (!dailyQuest.isAllCompleted || dailyQuest.completionBonusClaimed || penaltyState.isActive) return;
 
     sound.playQuestComplete();
     setDailyQuest(prev => ({
@@ -637,10 +739,7 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       completedAt: new Date().toLocaleTimeString(),
     }));
 
-    // 1. Award +300 Global XP for Perfect Day
     awardXP(300, 'perfect_day', dailyQuest.date, 'PERFECT DAY BONUS');
-
-    // 2. Award +100 SENSE Attribute XP for Perfect Day
     awardAttributeXP(
       'sen', 
       100, 
@@ -673,7 +772,6 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       };
     });
 
-    // Save to history
     setHistory(h => [
       {
         date: dailyQuest.date,
@@ -691,13 +789,13 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     addNotification(
       'PERFECT DAY BONUS CLAIMED',
-      `+300 Global EXP & +100 SENSE EXP awarded! Full physical and discipline progression logged.`,
+      `+300 Global EXP & +100 SENSE EXP awarded! Full discipline logged.`,
       'reward'
     );
   };
 
   const activateRestDay = (): boolean => {
-    if (profile.shieldsAvailable <= 0 || dailyQuest.isRestDay) {
+    if (profile.shieldsAvailable <= 0 || dailyQuest.isRestDay || penaltyState.isActive) {
       return false;
     }
 
@@ -729,9 +827,52 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return true;
   };
 
+  /**
+   * Anti-Cheat Penalty Clearance
+   * Can ONLY be cleared when all 7 drills are 100% completed.
+   */
+  const clearPenaltyZone = (): boolean => {
+    if (!penaltyState.isActive) return false;
+
+    const allDrillsDone = penaltyState.drills.every(d => d.current >= d.target);
+
+    if (!allDrillsDone) {
+      return false; // Refuse clearance if drills are incomplete
+    }
+
+    sound.playPenaltySurvived();
+    setPenaltyState({
+      isActive: false,
+      startTimestamp: null,
+      endTimestamp: null,
+      triggerDate: null,
+      drills: getDefaultPenaltyDrills(),
+    });
+
+    addNotification('PENALTY ZONE CLEARED', 'Survival protocol completed. Returned to normal reality.', 'reward');
+    return true;
+  };
+
+  const triggerManualPenaltyZone = () => {
+    sound.playPenaltySiren();
+    setPenaltyState({
+      isActive: true,
+      startTimestamp: Date.now(),
+      endTimestamp: null,
+      triggerDate: getLocalDateKey(),
+      drills: getDefaultPenaltyDrills(),
+    });
+
+    addNotification(
+      'PENALTY ZONE ACTIVATED',
+      'Emergency survival simulation active. Complete all 7 drills to escape.',
+      'penalty'
+    );
+  };
+
   const exportData = (): string => {
     const exportPayload = {
-      version: '3.2',
+      version: '3.3',
       exportedAt: new Date().toISOString(),
       profile,
       attributeXP,
@@ -739,6 +880,8 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       history,
       xpTransactions,
       attributeTransactions,
+      penaltyLedger,
+      penaltyState,
     };
     return JSON.stringify(exportPayload, null, 2);
   };
@@ -746,56 +889,61 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const importData = (jsonStr: string): boolean => {
     try {
       const parsed = JSON.parse(jsonStr);
-      if (parsed.profile) {
+      if (parsed.profile && typeof parsed.profile === 'object') {
         const totalXP = typeof parsed.profile.totalXP === 'number' ? parsed.profile.totalXP : (parsed.profile.xp || 0);
         const currentLevel = calculateLevel(totalXP);
         const rank = calculateHunterRank(currentLevel);
+
+        // Sanitize penalty ledger to prevent corruption
+        const validPenaltyLedger: PenaltyLedgerEvent[] = Array.isArray(parsed.penaltyLedger)
+          ? parsed.penaltyLedger.filter((e: any) => typeof e?.id === 'string' && typeof e?.date === 'string')
+          : [];
+
+        setPenaltyLedger(validPenaltyLedger);
 
         setProfile({
           ...parsed.profile,
           totalXP,
           currentLevel,
           rank,
+          penaltyCount: Math.max(0, validPenaltyLedger.length),
         });
 
         if (parsed.attributeXP) setAttributeXP(parsed.attributeXP);
-        if (parsed.history) setHistory(parsed.history);
-        if (parsed.dailyQuest) setDailyQuest(parsed.dailyQuest);
-        if (parsed.xpTransactions) setXpTransactions(parsed.xpTransactions);
-        if (parsed.attributeTransactions) setAttributeTransactions(parsed.attributeTransactions);
+        if (Array.isArray(parsed.history)) setHistory(parsed.history);
+        if (parsed.dailyQuest) {
+          const dq = parsed.dailyQuest;
+          if (Array.isArray(dq.quests)) {
+            dq.quests = dq.quests.map((q: QuestItem) => (q.id === 'study' ? { ...q, target: 60, isCompleted: q.current >= 60 } : q));
+            dq.isAllCompleted = dq.quests.every((q: QuestItem) => q.isCompleted) || dq.isAllCompleted;
+          }
+          setDailyQuest(dq);
+        }
+        if (Array.isArray(parsed.xpTransactions)) setXpTransactions(parsed.xpTransactions);
+        if (Array.isArray(parsed.attributeTransactions)) setAttributeTransactions(parsed.attributeTransactions);
+
+        if (parsed.penaltyState && typeof parsed.penaltyState.isActive === 'boolean') {
+          const ps = parsed.penaltyState;
+          if (Array.isArray(ps.drills)) {
+            ps.drills = ps.drills.map((d: PenaltyDrillItem) => {
+              if (d.id === 'steps' && d.target === 5000) return { ...d, target: 2000 };
+              if (d.id === 'study' && (d.target === 30 || d.target === 120)) return { ...d, target: 18 };
+              return d;
+            });
+          }
+          ps.endTimestamp = null;
+          setPenaltyState(ps);
+        }
 
         localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
         sound.playQuestComplete();
-        addNotification('BACKUP RESTORED', 'Your Hunter data, Attribute XP, and level have been restored!', 'reward');
+        addNotification('BACKUP RESTORED', 'Your Hunter state, Attribute XP, and Penalty Ledger restored!', 'reward');
         return true;
       }
     } catch (e) {
       console.error('Failed to import JSON data', e);
     }
     return false;
-  };
-
-  const triggerPenaltyZone = () => {
-    sound.playPenaltySiren();
-    setPenaltyActive(true);
-    setPenaltySecondsLeft(14400);
-    setProfile(prev => ({ ...prev, penaltyCount: prev.penaltyCount + 1 }));
-    addNotification(
-      'PENALTY ZONE ACTIVATED',
-      'Survival protocol triggered! Complete emergency conditioning to clear.',
-      'penalty'
-    );
-  };
-
-  const clearPenaltyZone = () => {
-    sound.playQuestComplete();
-    setPenaltyActive(false);
-    addNotification('PENALTY ZONE CLEARED', 'Survival protocol completed. Returned to normal.', 'info');
-  };
-
-  const resetTodayQuests = () => {
-    setDailyQuest(getInitialDailyQuestState());
-    addNotification('QUEST RESET', 'Today’s quest progress has been reset to 0.', 'info');
   };
 
   return (
@@ -810,27 +958,27 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         history,
         xpTransactions,
         attributeTransactions,
+        penaltyLedger,
+        penaltyState,
         notifications,
         floatingXp,
         levelProgress,
-        penaltyActive,
-        penaltySecondsLeft,
         isMuted,
         toggleMute,
         awardXP,
         awardAttributeXP,
         addQuestProgress,
+        updatePenaltyDrillProgress,
         claimDailyCompletionBonus,
         activateRestDay,
         exportData,
         importData,
         updateProfileName,
-        triggerPenaltyZone,
+        triggerManualPenaltyZone,
         clearPenaltyZone,
         addNotification,
         dismissNotification,
         dismissFloatingXp,
-        resetTodayQuests,
       }}
     >
       {children}

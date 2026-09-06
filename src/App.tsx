@@ -9,7 +9,7 @@ import { PenaltyZone } from './components/PenaltyZone';
 import { NotificationModal } from './components/NotificationModal';
 
 const AppContent: React.FC = () => {
-  const { activeTab, penaltyActive } = useSystem();
+  const { activeTab, penaltyState } = useSystem();
 
   return (
     <div className="relative min-h-screen bg-[#040711] text-slate-100 flex flex-col justify-between overflow-x-hidden">
@@ -41,7 +41,7 @@ const AppContent: React.FC = () => {
       </div>
 
       {/* Penalty Zone Emergency Overlay */}
-      {penaltyActive && <PenaltyZone />}
+      {penaltyState.isActive && <PenaltyZone />}
     </div>
   );
 };

@@ -55,7 +55,7 @@ export interface QuestItem {
   id: QuestType;
   name: string;
   category: 'physical' | 'study';
-  target: number; // Pushups: 150, Squats: 150, Situps: 100, Pullups: 30, Plank: 300, Steps: 10000, Study: 120
+  target: number; // Pushups: 150, Squats: 150, Situps: 100, Pullups: 30, Plank: 300, Steps: 10000, Study: 60
   current: number;
   unit: string;
   icon: string;
@@ -102,6 +102,34 @@ export interface SystemNotification {
   message: string;
   type: 'info' | 'warning' | 'quest' | 'levelup' | 'reward' | 'penalty';
   timestamp: string;
+}
+
+// -------------------------------------------------------------
+// PENALTY STATE MACHINE & LEDGER MODELS
+// -------------------------------------------------------------
+export interface PenaltyDrillItem {
+  id: string;
+  name: string;
+  category: 'physical' | 'discipline';
+  target: number;
+  current: number;
+  unit: string;
+  icon: string;
+}
+
+export interface PenaltyState {
+  isActive: boolean;
+  startTimestamp: number | null;
+  endTimestamp: number | null; // Persisted timestamp for accurate remaining time calculation
+  triggerDate: string | null; // The missed date that triggered the penalty
+  drills: PenaltyDrillItem[];
+}
+
+export interface PenaltyLedgerEvent {
+  id: string; // Format: penalty:YYYY-MM-DD
+  date: string; // The missed calendar date
+  timestamp: number;
+  reason: string;
 }
 
 export type { 

@@ -1,9 +1,9 @@
 import React from 'react';
-import { Volume2, VolumeX, ShieldAlert, Flame } from 'lucide-react';
+import { Volume2, VolumeX, Flame } from 'lucide-react';
 import { useSystem } from '../context/SystemContext';
 
 export const Header: React.FC = () => {
-  const { profile, isMuted, toggleMute, triggerPenaltyZone, penaltyActive } = useSystem();
+  const { profile, isMuted, toggleMute } = useSystem();
 
   return (
     <header className="sticky top-0 z-30 w-full bg-[#02040a]/80 backdrop-blur-xl border-b border-white/[0.06] px-4 py-3">
@@ -26,7 +26,7 @@ export const Header: React.FC = () => {
           </div>
         </div>
 
-        {/* Right: Streak, Sound, Penalty */}
+        {/* Right: Streak & Sound */}
         <div className="flex items-center space-x-2">
           {/* Active Streak */}
           <div className="flex items-center space-x-1 px-2.5 py-1 rounded-full bg-amber-500/[0.08] border border-amber-500/25 text-amber-300 text-xs font-mono font-medium">
@@ -46,17 +46,6 @@ export const Header: React.FC = () => {
           >
             {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
           </button>
-
-          {/* Penalty Emergency Trigger */}
-          {!penaltyActive && (
-            <button
-              onClick={triggerPenaltyZone}
-              className="p-1.5 rounded-lg bg-rose-950/30 border border-rose-500/30 text-rose-400 hover:bg-rose-900/40 transition-all"
-              title="Test Penalty Zone"
-            >
-              <ShieldAlert className="w-4 h-4" />
-            </button>
-          )}
         </div>
       </div>
     </header>

@@ -135,6 +135,11 @@ export const DailyQuest: React.FC = () => {
     if (quest.id === 'study') {
       const currentHours = Math.floor(quest.current / 60);
       const currentMins = quest.current % 60;
+      if (quest.target === 60) {
+        return currentHours > 0
+          ? `${currentHours}h ${currentMins}m / 1h`
+          : `${currentMins}m / 60m`;
+      }
       const targetHours = Math.floor(quest.target / 60);
       return `${currentHours}h ${currentMins}m / ${targetHours}h`;
     }
@@ -557,7 +562,7 @@ export const DailyQuest: React.FC = () => {
               <p className="text-xs text-zinc-500 font-mono mt-2">
                 {activeTimerQuest.id === 'plank'
                   ? `Target: 5 Minutes (300s)`
-                  : `Target: 2 Hours (120 mins)`}
+                  : `Target: 1 Hour (60 mins)`}
               </p>
             </div>
 

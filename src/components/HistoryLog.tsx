@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Calendar, CheckCircle2, Flame, Award, Shield, Sparkles } from 'lucide-react';
 import { useSystem } from '../context/SystemContext';
+import { getLocalDateKey } from '../utils/dateUtils';
 
 export const HistoryLog: React.FC = () => {
   const { history, profile, dailyQuest } = useSystem();
@@ -28,7 +29,7 @@ export const HistoryLog: React.FC = () => {
   const startOffset = (firstDayIndex + 6) % 7; // Convert to Mon = 0
 
   const daysArray = Array.from({ length: totalDaysInMonth }, (_, i) => i + 1);
-  const todayStr = now.toISOString().split('T')[0];
+  const todayStr = getLocalDateKey(now);
 
   const getDayStatus = (dayNum: number) => {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;

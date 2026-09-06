@@ -275,6 +275,57 @@ class SoundEngine {
       osc.stop(now + 0.16);
     } catch {}
   }
+
+  public playPenaltySurvived() {
+    if (this.isMuted) return;
+    try {
+      this.initCtx();
+      if (!this.ctx) return;
+
+      const now = this.ctx.currentTime;
+
+      // 1. Deep impact sub-bass shockwave
+      const sub = this.ctx.createOscillator();
+      const subGain = this.ctx.createGain();
+      sub.type = 'triangle';
+      sub.frequency.setValueAtTime(150, now);
+      sub.frequency.exponentialRampToValueAtTime(35, now + 0.9);
+      subGain.gain.setValueAtTime(0.35, now);
+      subGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.2);
+      sub.connect(subGain);
+      subGain.connect(this.ctx.destination);
+      sub.start(now);
+      sub.stop(now + 1.25);
+
+      // 2. Ascending heroic triad fanfare
+      const chord = [392.00, 523.25, 659.25, 783.99, 1046.50]; // G4 -> C5 -> E5 -> G5 -> C6
+      chord.forEach((freq, idx) => {
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        const t = now + 0.15 + idx * 0.08;
+
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(freq, t);
+
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(1400, t);
+        filter.frequency.exponentialRampToValueAtTime(350, t + 0.9);
+
+        gain.gain.setValueAtTime(0.01, t);
+        gain.gain.linearRampToValueAtTime(0.18, t + 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + 1.1);
+
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start(t);
+        osc.stop(t + 1.15);
+      });
+    } catch {}
+  }
 }
 
 export const sound = new SoundEngine();

@@ -13,7 +13,7 @@
 
 * **7 Cumulative Daily Protocols:** 
   * Physical: Push-ups (150), Squats (150), Sit-ups (100), Pull-ups (30), Plank (5 mins), Steps (10,000)
-  * Intellect: Focused Study (2 hours)
+  * Intellect: Focused Study (1 hour)
 * **Dual-Track Progression Engine:**
   * **Global Hunter Level:** Linear RPG formula `500 + 250 * (level - 1)` with rank promotions (Rank E to National Level).
   * **5 Attribute Levels:** Dedicated level curves for **STR, VIT, AGI, INT, SENSE** with individual XP thresholds and sub-level progress bars.
