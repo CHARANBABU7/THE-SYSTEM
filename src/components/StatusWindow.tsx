@@ -14,6 +14,7 @@ import {
   Shield,
   FileText,
   Sparkles,
+  Skull,
   X
 } from 'lucide-react';
 import { useSystem } from '../context/SystemContext';
@@ -27,7 +28,8 @@ export const StatusWindow: React.FC = () => {
     attributeProgress,
     updateProfileName, 
     exportData, 
-    importData 
+    importData,
+    triggerManualPenaltyZone 
   } = useSystem();
 
   const [isEditingName, setIsEditingName] = useState(false);
@@ -458,6 +460,27 @@ export const StatusWindow: React.FC = () => {
               >
                 <Upload className="w-3.5 h-3.5 text-zinc-400" />
                 <span>Choose Backup File to Restore</span>
+              </button>
+            </div>
+
+            {/* Section 3: Emergency / Penalty Protocol Simulation */}
+            <div className="space-y-1.5 p-3 rounded-xl bg-rose-950/20 border border-rose-500/20">
+              <div className="text-xs font-semibold text-rose-300 flex items-center space-x-1.5">
+                <Skull className="w-3.5 h-3.5 text-rose-400" />
+                <span>3. Penalty Protocol Test Simulation</span>
+              </div>
+              <p className="text-[11px] text-zinc-400">
+                Test the Penalty Zone drills, focus timers, and survival escape mechanisms directly.
+              </p>
+              <button
+                onClick={() => {
+                  setShowBackupModal(false);
+                  triggerManualPenaltyZone();
+                }}
+                className="w-full py-2 mt-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-xs font-mono font-semibold text-rose-300 border border-rose-500/30 flex items-center justify-center space-x-1.5 transition-all active:scale-95"
+              >
+                <Skull className="w-3.5 h-3.5 text-rose-400" />
+                <span>Simulate / Enter Penalty Zone</span>
               </button>
             </div>
           </div>

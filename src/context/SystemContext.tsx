@@ -899,6 +899,48 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           ? parsed.penaltyLedger.filter((e: any) => typeof e?.id === 'string' && typeof e?.date === 'string')
           : [];
 
+        const currentLocalToday = getLocalDateKey();
+        let shouldActivatePenalty = false;
+        let lastTriggerDate = '';
+
+        if (parsed.dailyQuest) {
+          const dq = parsed.dailyQuest;
+          if (Array.isArray(dq.quests)) {
+            dq.quests = dq.quests.map((q: QuestItem) => (q.id === 'study' ? { ...q, target: 60, isCompleted: q.current >= 60 } : q));
+            dq.isAllCompleted = dq.quests.every((q: QuestItem) => q.isCompleted) || dq.isAllCompleted;
+          }
+
+          // If imported date is from a past calendar day, immediately scan for missed penalties
+          if (dq.date < currentLocalToday) {
+            const missedRange = getMissedDateRange(dq.date, currentLocalToday);
+            missedRange.forEach(dateKey => {
+              const isHistoricalRest = Array.isArray(parsed.history) && parsed.history.some((h: any) => h.date === dateKey && h.isRestDay);
+              const isHistoricalCompleted = Array.isArray(parsed.history) && parsed.history.some((h: any) => h.date === dateKey && h.completed);
+              const isImportDay = dateKey === dq.date;
+              const isImportSafe = isImportDay && (dq.isAllCompleted || dq.isRestDay);
+
+              if (!isHistoricalRest && !isHistoricalCompleted && !isImportSafe) {
+                const penaltyId = `penalty:${dateKey}`;
+                if (!validPenaltyLedger.some(e => e.id === penaltyId)) {
+                  validPenaltyLedger.unshift({
+                    id: penaltyId,
+                    date: dateKey,
+                    timestamp: Date.now(),
+                    reason: 'Daily conditioning incomplete on imported past date',
+                  });
+                  shouldActivatePenalty = true;
+                  lastTriggerDate = dateKey;
+                }
+              }
+            });
+
+            // Initialize clean daily quest sheet for today
+            setDailyQuest(getInitialDailyQuestState(currentLocalToday));
+          } else {
+            setDailyQuest(dq);
+          }
+        }
+
         setPenaltyLedger(validPenaltyLedger);
 
         setProfile({
@@ -906,23 +948,30 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           totalXP,
           currentLevel,
           rank,
+          streakDays: shouldActivatePenalty ? 0 : (parsed.profile.streakDays || 0),
           penaltyCount: Math.max(0, validPenaltyLedger.length),
         });
 
         if (parsed.attributeXP) setAttributeXP(parsed.attributeXP);
         if (Array.isArray(parsed.history)) setHistory(parsed.history);
-        if (parsed.dailyQuest) {
-          const dq = parsed.dailyQuest;
-          if (Array.isArray(dq.quests)) {
-            dq.quests = dq.quests.map((q: QuestItem) => (q.id === 'study' ? { ...q, target: 60, isCompleted: q.current >= 60 } : q));
-            dq.isAllCompleted = dq.quests.every((q: QuestItem) => q.isCompleted) || dq.isAllCompleted;
-          }
-          setDailyQuest(dq);
-        }
         if (Array.isArray(parsed.xpTransactions)) setXpTransactions(parsed.xpTransactions);
         if (Array.isArray(parsed.attributeTransactions)) setAttributeTransactions(parsed.attributeTransactions);
 
-        if (parsed.penaltyState && typeof parsed.penaltyState.isActive === 'boolean') {
+        if (shouldActivatePenalty) {
+          sound.playPenaltySiren();
+          setPenaltyState({
+            isActive: true,
+            startTimestamp: Date.now(),
+            endTimestamp: null,
+            triggerDate: lastTriggerDate,
+            drills: getDefaultPenaltyDrills(),
+          });
+          addNotification(
+            'PENALTY ZONE ACTIVATED',
+            'Imported past missed day detected! Complete all 7 redemption drills to survive.',
+            'penalty'
+          );
+        } else if (parsed.penaltyState && typeof parsed.penaltyState.isActive === 'boolean') {
           const ps = parsed.penaltyState;
           if (Array.isArray(ps.drills)) {
             ps.drills = ps.drills.map((d: PenaltyDrillItem) => {
@@ -935,9 +984,8 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           setPenaltyState(ps);
         }
 
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
         sound.playQuestComplete();
-        addNotification('BACKUP RESTORED', 'Your Hunter state, Attribute XP, and Penalty Ledger restored!', 'reward');
+        addNotification('BACKUP RESTORED', 'Your Hunter state and stats have been loaded!', 'reward');
         return true;
       }
     } catch (e) {
