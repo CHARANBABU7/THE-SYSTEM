@@ -8,7 +8,8 @@ import {
   Play, 
   Pause, 
   RotateCcw, 
-  X 
+  X,
+  Plus
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useSystem } from '../context/SystemContext';
@@ -20,6 +21,10 @@ export const PenaltyZone: React.FC = () => {
     updatePenaltyDrillProgress, 
     clearPenaltyZone 
   } = useSystem();
+
+  // Scroller Modal State in Penalty
+  const [activeModalItem, setActiveModalItem] = useState<PenaltyDrillItem | null>(null);
+  const [sliderAmount, setSliderAmount] = useState<number>(5);
 
   // Live Stopwatch / Focus state for Plank & Study
   const [activeTimerItem, setActiveTimerItem] = useState<PenaltyDrillItem | null>(null);
@@ -49,6 +54,26 @@ export const PenaltyZone: React.FC = () => {
     setTimerRunning(false);
     setActiveTimerItem(null);
     setElapsedSeconds(0);
+  };
+
+  const handleOpenAddModal = (item: PenaltyDrillItem) => {
+    setActiveModalItem(item);
+    const remaining = Math.max(1, item.target - item.current);
+    if (item.id === 'steps') {
+      setSliderAmount(Math.min(500, remaining));
+    } else if (item.id === 'plank') {
+      setSliderAmount(Math.min(30, remaining));
+    } else if (item.id === 'study') {
+      setSliderAmount(Math.min(5, remaining));
+    } else {
+      setSliderAmount(Math.min(5, remaining));
+    }
+  };
+
+  const handleApplyProgress = (amount: number) => {
+    if (!activeModalItem || amount <= 0) return;
+    updatePenaltyDrillProgress(activeModalItem.id, amount);
+    setActiveModalItem(null);
   };
 
   const completedCount = penaltyState.drills.filter(i => i.current >= i.target).length;
@@ -85,6 +110,19 @@ export const PenaltyZone: React.FC = () => {
 
   const physicalItems = penaltyState.drills.filter(i => i.category === 'physical');
   const disciplineItems = penaltyState.drills.filter(i => i.category === 'discipline');
+
+  const getSliderConfig = (item: PenaltyDrillItem) => {
+    if (item.id === 'steps') {
+      return { min: 100, max: 2000, step: 100, smallStep: 100, largeStep: 500 };
+    }
+    if (item.id === 'plank') {
+      return { min: 5, max: 120, step: 5, smallStep: 5, largeStep: 15 };
+    }
+    if (item.id === 'study') {
+      return { min: 1, max: 18, step: 1, smallStep: 1, largeStep: 5 };
+    }
+    return { min: 1, max: item.target, step: 1, smallStep: 1, largeStep: 5 };
+  };
 
   return (
     <div className="fixed inset-0 z-50 bg-[#080104] text-rose-100 flex flex-col p-4 overflow-y-auto backdrop-blur-xl">
@@ -171,8 +209,8 @@ export const PenaltyZone: React.FC = () => {
                     <div className="h-full bg-rose-500 transition-all" style={{ width: `${pct}%` }} />
                   </div>
 
-                  {/* Controls */}
-                  <div className="flex items-center justify-end space-x-1.5">
+                  {/* Clean Action Controls */}
+                  <div className="flex items-center justify-between gap-1.5 pt-0.5">
                     {item.id === 'plank' ? (
                       <>
                         <button
@@ -187,42 +225,45 @@ export const PenaltyZone: React.FC = () => {
                           <span>Stopwatch</span>
                         </button>
                         <button
-                          onClick={() => updatePenaltyDrillProgress(item.id, 30)}
-                          className="px-2.5 py-1 rounded-lg bg-white/[0.05] text-xs font-mono text-rose-200"
+                          onClick={() => handleOpenAddModal(item)}
+                          className="px-2.5 py-1 rounded-lg bg-white/[0.05] text-xs font-mono text-rose-200 ml-auto flex items-center space-x-1"
                         >
-                          +30s
+                          <Plus className="w-3 h-3 text-rose-400" />
+                          <span>Log Time</span>
                         </button>
                       </>
                     ) : item.id === 'steps' ? (
                       <>
+                        <div className="flex items-center space-x-1.5">
+                          <button
+                            onClick={() => updatePenaltyDrillProgress(item.id, 500)}
+                            className="px-2.5 py-1 rounded-lg bg-white/[0.05] text-xs font-mono text-rose-200"
+                          >
+                            +500
+                          </button>
+                          <button
+                            onClick={() => updatePenaltyDrillProgress(item.id, 1000)}
+                            className="px-2.5 py-1 rounded-lg bg-white/[0.05] text-xs font-mono text-rose-200"
+                          >
+                            +1k
+                          </button>
+                        </div>
                         <button
-                          onClick={() => updatePenaltyDrillProgress(item.id, 500)}
-                          className="px-2.5 py-1 rounded-lg bg-white/[0.05] text-xs font-mono text-rose-200"
+                          onClick={() => handleOpenAddModal(item)}
+                          className="px-2.5 py-1 rounded-lg bg-white/[0.05] text-xs font-mono text-rose-200 ml-auto flex items-center space-x-1"
                         >
-                          +500
-                        </button>
-                        <button
-                          onClick={() => updatePenaltyDrillProgress(item.id, 1000)}
-                          className="px-2.5 py-1 rounded-lg bg-white/[0.05] text-xs font-mono text-rose-200"
-                        >
-                          +1k
+                          <Plus className="w-3 h-3 text-rose-400" />
+                          <span>Custom</span>
                         </button>
                       </>
                     ) : (
-                      <>
-                        <button
-                          onClick={() => updatePenaltyDrillProgress(item.id, 5)}
-                          className="px-2.5 py-1 rounded-lg bg-white/[0.05] text-xs font-mono text-rose-200"
-                        >
-                          +5
-                        </button>
-                        <button
-                          onClick={() => updatePenaltyDrillProgress(item.id, 10)}
-                          className="px-2.5 py-1 rounded-lg bg-white/[0.05] text-xs font-mono text-rose-200"
-                        >
-                          +10
-                        </button>
-                      </>
+                      <button
+                        onClick={() => handleOpenAddModal(item)}
+                        className="w-full py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 font-mono text-xs font-semibold flex items-center justify-center space-x-1.5 transition-all"
+                      >
+                        <Plus className="w-3 h-3 text-rose-400" />
+                        <span>Log Reps</span>
+                      </button>
                     )}
                   </div>
                 </div>
@@ -273,35 +314,25 @@ export const PenaltyZone: React.FC = () => {
                   <div className="h-full bg-rose-500 transition-all" style={{ width: `${pct}%` }} />
                 </div>
 
-                <div className="flex items-center justify-end space-x-1.5">
+                <div className="flex items-center justify-between gap-2">
                   <button
                     onClick={() => {
                       setActiveTimerItem(item);
                       setElapsedSeconds(0);
                       setTimerRunning(false);
                     }}
-                    className="px-2.5 py-1 rounded-lg bg-rose-500/20 text-rose-300 font-mono text-[11px] font-semibold flex items-center space-x-1"
+                    className="flex-1 py-1 rounded-lg bg-rose-500/20 text-rose-300 font-mono text-xs font-semibold flex items-center justify-center space-x-1"
                   >
-                    <Timer className="w-3 h-3" />
-                    <span>Focus Timer</span>
+                    <Timer className="w-3 h-3 text-rose-400" />
+                    <span>Focus Timer (18m)</span>
                   </button>
+
                   <button
-                    onClick={() => updatePenaltyDrillProgress(item.id, 5)}
-                    className="px-2.5 py-1 rounded-lg bg-white/[0.05] text-xs font-mono text-rose-200"
+                    onClick={() => handleOpenAddModal(item)}
+                    className="px-3 py-1 rounded-lg bg-white/[0.05] text-xs font-mono text-rose-200 flex items-center space-x-1"
                   >
-                    +5m
-                  </button>
-                  <button
-                    onClick={() => updatePenaltyDrillProgress(item.id, 10)}
-                    className="px-2.5 py-1 rounded-lg bg-white/[0.05] text-xs font-mono text-rose-200"
-                  >
-                    +10m
-                  </button>
-                  <button
-                    onClick={() => updatePenaltyDrillProgress(item.id, 18)}
-                    className="px-2.5 py-1 rounded-lg bg-rose-500/15 border border-rose-500/30 text-xs font-mono font-bold text-rose-300"
-                  >
-                    +18m
+                    <Plus className="w-3 h-3 text-rose-400" />
+                    <span>Log Time</span>
                   </button>
                 </div>
               </div>
@@ -348,7 +379,7 @@ export const PenaltyZone: React.FC = () => {
                 }}
                 className="text-zinc-400 hover:text-white"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
@@ -405,6 +436,118 @@ export const PenaltyZone: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Touch Scroller Modal for Penalty Drills */}
+      {activeModalItem && (() => {
+        const config = getSliderConfig(activeModalItem);
+        const unitLabel = activeModalItem.id === 'plank' 
+          ? 'secs' 
+          : activeModalItem.id === 'study' 
+          ? 'mins' 
+          : activeModalItem.unit;
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex items-center justify-center p-4">
+            <div className="w-full max-w-sm system-card-penalty rounded-3xl p-6 border-rose-500/40 text-center space-y-4 animate-in fade-in zoom-in duration-200">
+              <div className="flex items-center justify-between border-b border-rose-900/40 pb-2.5">
+                <div className="flex items-center space-x-2">
+                  <span className="text-xl">{activeModalItem.icon}</span>
+                  <div className="text-left">
+                    <h3 className="font-display font-bold text-sm text-white">
+                      Log {activeModalItem.name}
+                    </h3>
+                    <span className="text-[10px] font-mono text-rose-400">
+                      Current: {formatProgressDisplay(activeModalItem)}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setActiveModalItem(null)}
+                  className="text-zinc-400 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Glowing Readout */}
+              <div className="py-2">
+                <span className="text-[10px] font-mono uppercase tracking-widest text-rose-400">
+                  Amount to Add
+                </span>
+                <div className="text-5xl font-mono font-bold text-rose-300 mt-1">
+                  +{sliderAmount.toLocaleString()}
+                  <span className="text-sm font-sans font-normal text-rose-400/80 ml-1.5 uppercase">
+                    {unitLabel}
+                  </span>
+                </div>
+              </div>
+
+              {/* Touch Range Scroller */}
+              <div className="space-y-3 px-1">
+                <input
+                  type="range"
+                  min={config.min}
+                  max={config.max}
+                  step={config.step}
+                  value={sliderAmount}
+                  onChange={e => setSliderAmount(Number(e.target.value))}
+                  className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-rose-500"
+                />
+
+                {/* Fine-Tuning Precision Steppers */}
+                <div className="flex items-center justify-between gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setSliderAmount(prev => Math.max(config.min, prev - config.largeStep))}
+                    className="flex-1 py-1.5 rounded-lg bg-white/[0.04] text-xs font-mono text-zinc-400 border border-white/[0.06] active:scale-95"
+                  >
+                    -{config.largeStep}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSliderAmount(prev => Math.max(config.min, prev - config.smallStep))}
+                    className="flex-1 py-1.5 rounded-lg bg-white/[0.04] text-xs font-mono text-zinc-400 border border-white/[0.06] active:scale-95"
+                  >
+                    -{config.smallStep}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSliderAmount(prev => Math.min(config.max, prev + config.smallStep))}
+                    className="flex-1 py-1.5 rounded-lg bg-white/[0.04] text-xs font-mono text-rose-200 border border-white/[0.06] active:scale-95"
+                  >
+                    +{config.smallStep}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSliderAmount(prev => Math.min(config.max, prev + config.largeStep))}
+                    className="flex-1 py-1.5 rounded-lg bg-white/[0.04] text-xs font-mono text-rose-200 border border-white/[0.06] active:scale-95"
+                  >
+                    +{config.largeStep}
+                  </button>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center space-x-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveModalItem(null)}
+                  className="flex-1 py-2.5 rounded-xl bg-white/[0.04] text-xs text-zinc-400 font-medium hover:bg-white/[0.08]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyProgress(sliderAmount)}
+                  className="flex-1 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-400 text-xs font-display font-bold text-black shadow-obsidian-glow transition-all active:scale-95"
+                >
+                  ✓ Confirm & Add
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

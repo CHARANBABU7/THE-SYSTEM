@@ -10,9 +10,10 @@ import {
   X,
   Play,
   Pause,
-  RotateCcw,
+  RotateCcw, 
   Shield,
-  Timer
+  Timer,
+  Minus
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useSystem } from '../context/SystemContext';
@@ -28,14 +29,14 @@ export const DailyQuest: React.FC = () => {
     floatingXp 
   } = useSystem();
 
+  // Scroller Modal State
   const [activeModalQuest, setActiveModalQuest] = useState<QuestItem | null>(null);
-  const [customInputValue, setCustomInputValue] = useState<string>('');
+  const [sliderAmount, setSliderAmount] = useState<number>(10);
   
   // Timer State (Plank & Study)
   const [activeTimerQuest, setActiveTimerQuest] = useState<QuestItem | null>(null);
   const [timerRunning, setTimerRunning] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [focusTargetMinutes, setFocusTargetMinutes] = useState<number>(25);
 
   const [timeLeft, setTimeLeft] = useState<{ hours: number; minutes: number; seconds: number }>({
     hours: 0,
@@ -98,21 +99,22 @@ export const DailyQuest: React.FC = () => {
 
   const handleOpenAddModal = (quest: QuestItem) => {
     setActiveModalQuest(quest);
-    setCustomInputValue('');
+    const remaining = Math.max(1, quest.target - quest.current);
+    if (quest.id === 'steps') {
+      setSliderAmount(Math.min(1000, remaining));
+    } else if (quest.id === 'plank') {
+      setSliderAmount(Math.min(30, remaining));
+    } else if (quest.id === 'study') {
+      setSliderAmount(Math.min(15, remaining));
+    } else {
+      setSliderAmount(Math.min(10, remaining));
+    }
   };
 
   const handleApplyProgress = (amount: number) => {
     if (!activeModalQuest || amount <= 0) return;
     addQuestProgress(activeModalQuest.id, amount);
     setActiveModalQuest(null);
-  };
-
-  const handleCustomSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const val = parseFloat(customInputValue);
-    if (!isNaN(val) && val > 0 && activeModalQuest) {
-      handleApplyProgress(val);
-    }
   };
 
   const handleGrandClaim = () => {
@@ -136,7 +138,7 @@ export const DailyQuest: React.FC = () => {
       const currentHours = Math.floor(quest.current / 60);
       const currentMins = quest.current % 60;
       if (quest.target === 60) {
-        return currentHours > 0
+        return currentHours > 0 
           ? `${currentHours}h ${currentMins}m / 1h`
           : `${currentMins}m / 60m`;
       }
@@ -162,105 +164,114 @@ export const DailyQuest: React.FC = () => {
 
   const completedCount = dailyQuest.quests.filter(q => q.isCompleted).length;
 
+  // Dynamic Slider Config
+  const getSliderConfig = (quest: QuestItem) => {
+    if (quest.id === 'steps') {
+      return { min: 100, max: 10000, step: 100, smallStep: 250, largeStep: 1000 };
+    }
+    if (quest.id === 'plank') {
+      return { min: 5, max: 300, step: 5, smallStep: 5, largeStep: 30 };
+    }
+    if (quest.id === 'study') {
+      return { min: 1, max: 60, step: 1, smallStep: 5, largeStep: 15 };
+    }
+    return { min: 1, max: quest.target, step: 1, smallStep: 1, largeStep: 5 };
+  };
+
   return (
-    <div className="space-y-4 pb-24 relative">
-      {/* Floating XP Gain Animations */}
-      <div className="fixed top-16 right-4 z-50 pointer-events-none space-y-2">
-        {floatingXp.map(evt => (
+    <div className="space-y-4 pb-24">
+      {/* Floating XP Animation Container */}
+      <div className="fixed top-20 right-4 pointer-events-none z-50 flex flex-col space-y-2 items-end">
+        {floatingXp.map(fx => (
           <div
-            key={evt.id}
-            className="animate-in fade-in slide-in-from-bottom-2 duration-300 flex items-center space-x-2 bg-zinc-900/90 border border-cyan-500/30 text-cyan-300 px-3.5 py-1.5 rounded-full font-mono font-semibold text-xs shadow-obsidian-glow backdrop-blur-md"
+            key={fx.id}
+            className="animate-floating-xp bg-black/80 border border-cyan-400 text-cyan-300 px-3 py-1.5 rounded-full font-mono text-xs font-bold shadow-obsidian-glow flex items-center space-x-1"
           >
-            <Sparkles className="w-3.5 h-3.5 text-cyan-400 animate-spin" />
-            <span>+{evt.amount} EXP</span>
-            <span className="text-[10px] text-zinc-400">({evt.source})</span>
+            <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+            <span>+{fx.amount} EXP</span>
+            {fx.source && <span className="text-[10px] text-zinc-400">({fx.source})</span>}
           </div>
         ))}
       </div>
 
-      {/* Rest Day Active Banner */}
-      {dailyQuest.isRestDay && (
-        <div className="system-card-gold p-3.5 rounded-2xl border-amber-500/30 text-center space-y-1">
-          <div className="flex items-center justify-center space-x-2 text-amber-300 font-display font-bold text-xs">
-            <Shield className="w-4 h-4 text-amber-400" />
-            <span>MONARCH AEGIS ACTIVE · REST & RECOVERY DAY</span>
+      {/* Quest Header Card: Obsidian HUD Theme */}
+      <div className="system-card rounded-2xl p-4 border-cyan-500/20 relative overflow-hidden">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center space-x-2">
+            <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse shadow-glow" />
+            <h2 className="font-display font-bold text-sm tracking-wider uppercase text-zinc-100">
+              DAILY CONDITIONING PROTOCOL
+            </h2>
           </div>
-          <p className="text-[11px] text-zinc-400">
-            Streak is frozen and fully protected. Daily protocols are paused for muscle recovery.
-          </p>
+          <span className="text-[10px] font-mono text-cyan-400/80 bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-500/30">
+            SOLO LEVELING
+          </span>
         </div>
-      )}
 
-      {/* Daily Quest Header Card */}
-      <div className="system-card p-4 rounded-2xl border-white/[0.08] shadow-obsidian-card relative overflow-hidden">
-        <div className="flex items-center justify-between border-b border-white/[0.06] pb-2.5 mb-3">
-          <div className="flex items-center space-x-2">
-            <span className="font-display font-bold text-xs tracking-widest text-cyan-400 uppercase">
-              DAILY QUEST
-            </span>
-            <span className="text-[10px] uppercase font-mono tracking-wider text-zinc-400 bg-white/[0.04] px-2 py-0.5 rounded border border-white/[0.06]">
-              Conditioning
+        {/* Countdown & Status */}
+        <div className="flex items-center justify-between text-xs text-zinc-400 border-t border-b border-white/[0.06] py-2.5 my-2">
+          <div className="flex items-center space-x-1.5">
+            <Clock className="w-3.5 h-3.5 text-amber-400" />
+            <span className="font-mono text-zinc-300">
+              Reset in {String(timeLeft.hours).padStart(2, '0')}:
+              {String(timeLeft.minutes).padStart(2, '0')}:
+              {String(timeLeft.seconds).padStart(2, '0')}
             </span>
           </div>
 
-          <div className="flex items-center space-x-2">
-            {/* Rest Day Trigger Pill */}
-            {!dailyQuest.isRestDay && profile.shieldsAvailable > 0 && (
-              <button
-                onClick={() => {
-                  if (window.confirm('Use 1 Recovery Shield to take a Rest Day? Your streak will be protected.')) {
-                    activateRestDay();
-                  }
-                }}
-                className="flex items-center space-x-1 text-[10px] font-mono font-semibold text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-1 rounded-lg border border-amber-500/25 transition-all"
-                title="Use Recovery Shield"
-              >
-                <Shield className="w-3 h-3 text-amber-400" />
-                <span>Rest ({profile.shieldsAvailable})</span>
-              </button>
-            )}
-
-            {/* Countdown Clock */}
-            <div className="flex items-center space-x-1.5 text-xs font-mono text-rose-400 font-medium bg-rose-950/20 px-2.5 py-1 rounded-lg border border-rose-500/20">
-              <Clock className="w-3.5 h-3.5 text-rose-400 animate-pulse" />
-              <span>
-                {String(timeLeft.hours).padStart(2, '0')}:{String(timeLeft.minutes).padStart(2, '0')}:
-                {String(timeLeft.seconds).padStart(2, '0')}
-              </span>
-            </div>
+          <div className="flex items-center space-x-1.5">
+            <Flame className="w-3.5 h-3.5 text-orange-400" />
+            <span className="font-mono font-semibold text-zinc-200">
+              {profile.streakDays} Day Streak
+            </span>
           </div>
         </div>
 
-        <h2 className="font-display font-bold text-base text-zinc-100 mb-0.5 tracking-tight">
-          Preparation to Become Strong
-        </h2>
-        <p className="text-xs text-zinc-400 mb-3 leading-relaxed">
-          Condition your body daily. Progress saves cumulatively throughout the day.
-        </p>
-
-        {/* Overall Completion Progress */}
-        <div className="space-y-1.5 bg-black/40 p-3 rounded-xl border border-white/[0.04]">
-          <div className="flex justify-between text-xs">
-            <span className="text-zinc-400 font-medium">Protocol Progress</span>
-            <span className="font-mono font-bold text-cyan-300">
-              {completedCount}/7 Complete ({totalProgressPercent}%)
-            </span>
+        {/* Global Progress Bar */}
+        <div className="mt-3 space-y-1.5">
+          <div className="flex justify-between text-[11px] font-mono">
+            <span className="text-zinc-400">PROTOCOL COMPLETION</span>
+            <span className="text-cyan-300 font-bold">{totalProgressPercent}% ({completedCount}/7)</span>
           </div>
-          <div className="w-full h-1.5 rounded-full bg-zinc-900 overflow-hidden">
+          <div className="w-full h-2 rounded-full bg-zinc-900/80 overflow-hidden p-0.5 border border-white/[0.06]">
             <div
-              className="h-full bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-500 transition-all duration-300"
-              style={{ width: `${Math.min(100, totalProgressPercent)}%` }}
+              className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all duration-500 shadow-glow"
+              style={{ width: `${totalProgressPercent}%` }}
             />
           </div>
         </div>
+
+        {/* Rest Day Aegis Button */}
+        <div className="mt-3 pt-2.5 border-t border-white/[0.06] flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <Shield className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="text-xs font-mono text-zinc-300">
+              Monarch's Aegis: <span className="font-bold text-cyan-300">{profile.shieldsAvailable} Shield</span>
+            </span>
+          </div>
+
+          {dailyQuest.isRestDay ? (
+            <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950/40 px-2.5 py-1 rounded-lg border border-emerald-500/30">
+              ✓ REST DAY ACTIVE (PROTECTED)
+            </span>
+          ) : (
+            <button
+              onClick={activateRestDay}
+              disabled={profile.shieldsAvailable <= 0}
+              className="px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-cyan-500/10 border border-white/10 hover:border-cyan-500/30 text-xs font-mono text-zinc-300 hover:text-cyan-300 transition-all disabled:opacity-30 disabled:pointer-events-none active:scale-95"
+            >
+              Activate Shield
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* SECTION 1: PHYSICAL QUESTS */}
+      {/* SECTION 1: PHYSICAL CONDITIONING (6 Quests) */}
       <div className="space-y-2">
         <div className="flex items-center justify-between px-1">
           <span className="font-display text-xs font-bold tracking-wider text-zinc-300 uppercase flex items-center space-x-1.5">
             <Flame className="w-3.5 h-3.5 text-cyan-400" />
-            <span>PHYSICAL PROTOCOLS</span>
+            <span>PHYSICAL CONDITIONING</span>
           </span>
           <span className="text-[10px] text-zinc-500 font-mono">6 Quests</span>
         </div>
@@ -277,7 +288,6 @@ export const DailyQuest: React.FC = () => {
                   : 'system-card border-white/[0.06] hover:border-cyan-500/20'
               }`}
             >
-              {/* Header */}
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center space-x-2.5">
                   <span className="text-lg p-1.5 bg-white/[0.03] rounded-xl border border-white/[0.06]">
@@ -295,7 +305,7 @@ export const DailyQuest: React.FC = () => {
                       )}
                     </div>
                     <span className="text-[10px] text-zinc-500 font-mono">
-                      +{quest.xpReward} EXP · +{quest.attributeBonus.toUpperCase()} XP
+                      +{quest.xpReward} EXP · +{quest.attributeBonus.toUpperCase()}
                     </span>
                   </div>
                 </div>
@@ -318,39 +328,28 @@ export const DailyQuest: React.FC = () => {
                 />
               </div>
 
-              {/* Steppers & Auto-Timer button */}
-              <div className="flex items-center justify-between gap-1.5 pt-0.5 flex-wrap">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  {quest.id === 'plank' ? (
-                    <>
-                      <button
-                        onClick={() => handleOpenTimer(quest)}
-                        className="px-2.5 py-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-xs font-mono font-semibold text-cyan-300 border border-cyan-500/30 flex items-center space-x-1 active:scale-95 transition-all"
-                      >
-                        <Timer className="w-3 h-3 text-cyan-400" />
-                        <span>Live Stopwatch</span>
-                      </button>
-                      <button
-                        onClick={() => addQuestProgress(quest.id, 30)}
-                        className="px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-mono font-medium text-zinc-300 border border-white/[0.08] active:scale-95 transition-all"
-                      >
-                        +30s
-                      </button>
-                      <button
-                        onClick={() => addQuestProgress(quest.id, 60)}
-                        className="px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-mono font-medium text-zinc-300 border border-white/[0.08] active:scale-95 transition-all"
-                      >
-                        +1m
-                      </button>
-                    </>
-                  ) : quest.id === 'steps' ? (
-                    <>
-                      <button
-                        onClick={() => addQuestProgress(quest.id, 500)}
-                        className="px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-mono font-medium text-zinc-300 border border-white/[0.08] active:scale-95 transition-all"
-                      >
-                        +500
-                      </button>
+              {/* Minimalist Action Controls */}
+              <div className="flex items-center justify-between gap-1.5 pt-0.5">
+                {quest.id === 'plank' ? (
+                  <>
+                    <button
+                      onClick={() => handleOpenTimer(quest)}
+                      className="px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-xs font-mono font-semibold text-cyan-300 border border-cyan-500/30 flex items-center space-x-1.5 active:scale-95 transition-all"
+                    >
+                      <Timer className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>Live Stopwatch</span>
+                    </button>
+                    <button
+                      onClick={() => handleOpenAddModal(quest)}
+                      className="px-3 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-xs font-mono font-medium text-zinc-200 flex items-center space-x-1 active:scale-95 ml-auto transition-all"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>Log Time</span>
+                    </button>
+                  </>
+                ) : quest.id === 'steps' ? (
+                  <>
+                    <div className="flex items-center gap-1.5">
                       <button
                         onClick={() => addQuestProgress(quest.id, 1000)}
                         className="px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-mono font-medium text-zinc-300 border border-white/[0.08] active:scale-95 transition-all"
@@ -363,38 +362,24 @@ export const DailyQuest: React.FC = () => {
                       >
                         +2.5k
                       </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        onClick={() => addQuestProgress(quest.id, 5)}
-                        className="px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-mono font-medium text-zinc-300 border border-white/[0.08] active:scale-95 transition-all"
-                      >
-                        +5
-                      </button>
-                      <button
-                        onClick={() => addQuestProgress(quest.id, 10)}
-                        className="px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-mono font-medium text-zinc-300 border border-white/[0.08] active:scale-95 transition-all"
-                      >
-                        +10
-                      </button>
-                      <button
-                        onClick={() => addQuestProgress(quest.id, 25)}
-                        className="px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-mono font-medium text-zinc-300 border border-white/[0.08] active:scale-95 transition-all"
-                      >
-                        +25
-                      </button>
-                    </>
-                  )}
-                </div>
-
-                <button
-                  onClick={() => handleOpenAddModal(quest)}
-                  className="px-3 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-xs font-mono font-medium text-zinc-300 flex items-center space-x-1 active:scale-95 ml-auto transition-all"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Custom</span>
-                </button>
+                    </div>
+                    <button
+                      onClick={() => handleOpenAddModal(quest)}
+                      className="px-3 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-xs font-mono font-medium text-zinc-200 flex items-center space-x-1 active:scale-95 ml-auto transition-all"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>Custom</span>
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => handleOpenAddModal(quest)}
+                    className="w-full py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-xs font-mono font-semibold text-cyan-300 border border-cyan-500/30 flex items-center justify-center space-x-1.5 active:scale-95 transition-all"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Log Reps</span>
+                  </button>
+                )}
               </div>
             </div>
           );
@@ -460,42 +445,22 @@ export const DailyQuest: React.FC = () => {
                 />
               </div>
 
-              {/* Study Steppers & Focus Timer */}
-              <div className="flex items-center justify-between gap-1.5 pt-0.5">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <button
-                    onClick={() => handleOpenTimer(quest)}
-                    className="px-2.5 py-1 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 text-xs font-mono font-semibold text-purple-300 border border-purple-500/30 flex items-center space-x-1 active:scale-95 transition-all"
-                  >
-                    <Timer className="w-3 h-3 text-purple-400" />
-                    <span>Focus Timer</span>
-                  </button>
-                  <button
-                    onClick={() => addQuestProgress(quest.id, 15)}
-                    className="px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-mono font-medium text-zinc-300 border border-white/[0.08] active:scale-95 transition-all"
-                  >
-                    +15m
-                  </button>
-                  <button
-                    onClick={() => addQuestProgress(quest.id, 30)}
-                    className="px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-mono font-medium text-zinc-300 border border-white/[0.08] active:scale-95 transition-all"
-                  >
-                    +30m
-                  </button>
-                  <button
-                    onClick={() => addQuestProgress(quest.id, 60)}
-                    className="px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-mono font-medium text-zinc-300 border border-white/[0.08] active:scale-95 transition-all"
-                  >
-                    +1h
-                  </button>
-                </div>
+              {/* Minimalist Study Actions */}
+              <div className="flex items-center justify-between gap-2 pt-0.5">
+                <button
+                  onClick={() => handleOpenTimer(quest)}
+                  className="flex-1 py-1.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-xs font-mono font-semibold text-purple-300 border border-purple-500/30 flex items-center justify-center space-x-1.5 active:scale-95 transition-all"
+                >
+                  <Timer className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Focus Timer</span>
+                </button>
 
                 <button
                   onClick={() => handleOpenAddModal(quest)}
-                  className="px-3 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-xs font-mono font-medium text-zinc-300 flex items-center space-x-1 active:scale-95 ml-auto transition-all"
+                  className="px-4 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-xs font-mono font-medium text-zinc-200 flex items-center space-x-1 active:scale-95 transition-all"
                 >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Custom</span>
+                  <Plus className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Log Time</span>
                 </button>
               </div>
             </div>
@@ -615,81 +580,117 @@ export const DailyQuest: React.FC = () => {
         </div>
       )}
 
-      {/* Custom Add Progress Modal */}
-      {activeModalQuest && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="w-full max-w-sm system-card rounded-2xl p-5 border-cyan-500/30 shadow-obsidian-glow text-left space-y-4 animate-in fade-in zoom-in duration-200">
-            <div className="flex items-center justify-between border-b border-white/[0.06] pb-2.5">
-              <div className="flex items-center space-x-2">
-                <span className="text-xl">{activeModalQuest.icon}</span>
-                <div>
-                  <h3 className="font-display font-bold text-sm text-zinc-100">
-                    Log {activeModalQuest.name}
-                  </h3>
-                  <span className="text-[11px] font-mono text-zinc-500">
-                    Current: {formatProgressDisplay(activeModalQuest)}
-                  </span>
-                </div>
-              </div>
-              <button
-                onClick={() => setActiveModalQuest(null)}
-                className="text-zinc-400 hover:text-white p-1"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+      {/* Touch-Scroller Modal (Zero Keyboard Input) */}
+      {activeModalQuest && (() => {
+        const config = getSliderConfig(activeModalQuest);
+        const unitLabel = activeModalQuest.id === 'plank' 
+          ? 'secs' 
+          : activeModalQuest.id === 'study' 
+          ? 'mins' 
+          : activeModalQuest.unit;
 
-            <form onSubmit={handleCustomSubmit} className="space-y-3">
-              <div>
-                <label className="text-xs text-zinc-400 block mb-1">
-                  Enter completed amount to add (cumulative):
-                </label>
+        return (
+          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="w-full max-w-sm system-card rounded-3xl p-6 border-cyan-500/30 shadow-obsidian-glow text-center space-y-5 animate-in fade-in zoom-in duration-200">
+              <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
                 <div className="flex items-center space-x-2">
-                  <input
-                    type="number"
-                    step="any"
-                    autoFocus
-                    placeholder={
-                      activeModalQuest.id === 'plank'
-                        ? 'Seconds (e.g. 45)'
-                        : activeModalQuest.id === 'study'
-                        ? 'Minutes (e.g. 30)'
-                        : 'Count (e.g. 20)'
-                    }
-                    value={customInputValue}
-                    onChange={e => setCustomInputValue(e.target.value)}
-                    className="flex-1 bg-black/60 border border-white/10 rounded-xl px-3 py-2 text-sm text-zinc-100 font-mono focus:outline-none focus:border-cyan-400 transition-colors"
-                  />
-                  <span className="text-xs text-zinc-400 font-mono uppercase">
-                    {activeModalQuest.id === 'plank'
-                      ? 'secs'
-                      : activeModalQuest.id === 'study'
-                      ? 'mins'
-                      : activeModalQuest.unit}
+                  <span className="text-2xl">{activeModalQuest.icon}</span>
+                  <div className="text-left">
+                    <h3 className="font-display font-bold text-sm text-zinc-100">
+                      Log {activeModalQuest.name}
+                    </h3>
+                    <span className="text-[10px] font-mono text-zinc-400">
+                      Current: {formatProgressDisplay(activeModalQuest)}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setActiveModalQuest(null)}
+                  className="text-zinc-400 hover:text-white p-1"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Big Glowing Value Readout */}
+              <div className="py-2">
+                <span className="text-[10px] font-mono uppercase tracking-widest text-cyan-400">
+                  Amount to Add
+                </span>
+                <div className="text-5xl font-mono font-bold text-cyan-300 mt-1">
+                  +{sliderAmount.toLocaleString()}
+                  <span className="text-sm font-sans font-normal text-zinc-400 ml-1.5 uppercase">
+                    {unitLabel}
                   </span>
                 </div>
               </div>
 
-              <div className="flex items-center space-x-2 pt-1">
+              {/* Touch Range Scroller */}
+              <div className="space-y-3 px-1">
+                <input
+                  type="range"
+                  min={config.min}
+                  max={config.max}
+                  step={config.step}
+                  value={sliderAmount}
+                  onChange={e => setSliderAmount(Number(e.target.value))}
+                  className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                />
+
+                {/* Fine-Tuning Precision Steppers */}
+                <div className="flex items-center justify-between gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setSliderAmount(prev => Math.max(config.min, prev - config.largeStep))}
+                    className="flex-1 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-mono text-zinc-400 border border-white/[0.06] active:scale-95"
+                  >
+                    -{config.largeStep}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSliderAmount(prev => Math.max(config.min, prev - config.smallStep))}
+                    className="flex-1 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-mono text-zinc-400 border border-white/[0.06] active:scale-95"
+                  >
+                    -{config.smallStep}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSliderAmount(prev => Math.min(config.max, prev + config.smallStep))}
+                    className="flex-1 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-mono text-zinc-200 border border-white/[0.06] active:scale-95"
+                  >
+                    +{config.smallStep}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSliderAmount(prev => Math.min(config.max, prev + config.largeStep))}
+                    className="flex-1 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-mono text-zinc-200 border border-white/[0.06] active:scale-95"
+                  >
+                    +{config.largeStep}
+                  </button>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center space-x-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setActiveModalQuest(null)}
-                  className="flex-1 py-2.5 rounded-xl bg-white/[0.04] text-xs text-zinc-400 font-medium hover:bg-white/[0.08]"
+                  className="flex-1 py-3 rounded-2xl bg-white/[0.04] text-xs text-zinc-400 font-medium hover:bg-white/[0.08]"
                 >
                   Cancel
                 </button>
                 <button
-                  type="submit"
-                  disabled={!customInputValue || parseFloat(customInputValue) <= 0}
-                  className="flex-1 py-2.5 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-xs font-display font-bold text-black disabled:opacity-40 transition-all"
+                  type="button"
+                  onClick={() => handleApplyProgress(sliderAmount)}
+                  className="flex-1 py-3 rounded-2xl bg-cyan-400 hover:bg-cyan-300 text-xs font-display font-bold text-black shadow-obsidian-glow transition-all active:scale-95"
                 >
-                  + Add Progress
+                  ✓ Confirm & Add
                 </button>
               </div>
-            </form>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };
