@@ -59,9 +59,9 @@ console.assert(multiLevel.nextLevelRequiredXP === 250, 'Level 4 next required sh
 console.log('✓ Test 15: Multi-level jump (500 XP -> Lv. 4, 50/250 XP) Passed');
 
 // 6. Global XP Engine compatibility
-const globalProg = calculateLevelProgress(620);
-console.assert(globalProg.currentLevel === 2, 'Global XP should remain unchanged (Level 2)');
-console.assert(globalProg.currentLevelXP === 120, 'Global XP should have 120 / 750 XP');
+const globalProg = calculateLevelProgress(220);
+console.assert(globalProg.currentLevel === 2, 'Global XP should reach Level 2');
+console.assert(globalProg.currentLevelXP === 120, 'Global XP should have 120 / 150 XP');
 console.log('✓ Test 16-17: Global Hunter XP and Streak compatibility verified');
 
 console.log('--- ALL 17 ATTRIBUTE & GLOBAL ENGINE TESTS PASSED WITH ZERO ERRORS ---');

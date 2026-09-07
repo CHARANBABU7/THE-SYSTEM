@@ -46,12 +46,13 @@ export interface AttributeProgress {
 }
 
 // -------------------------------------------------------------
-// 1. GLOBAL HUNTER XP ENGINE
-// Formula: getXPRequiredForLevel(level) = 500 + ((level - 1) * 250)
+// 1. GLOBAL HUNTER XP ENGINE (1-Year / 360-Day Level 100 Curve)
+// Formula: getXPRequiredForLevel(level) = 100 + ((level - 1) * 50)
+// Total XP to Level 100 = 252,450 EXP (~360 Days at 700 EXP/day)
 // -------------------------------------------------------------
 export function getXPRequiredForLevel(level: number): number {
   const lvl = Math.max(1, Math.floor(level));
-  return 500 + ((lvl - 1) * 250);
+  return 100 + ((lvl - 1) * 50);
 }
 
 export function calculateLevel(totalXP: number): number {
@@ -98,12 +99,12 @@ export function calculateLevelProgress(totalXP: number): LevelProgress {
 }
 
 export function calculateHunterRank(level: number): 'E' | 'D' | 'C' | 'B' | 'A' | 'S' | 'National Level' {
-  if (level >= 80) return 'National Level';
-  if (level >= 60) return 'S';
-  if (level >= 45) return 'A';
-  if (level >= 30) return 'B';
-  if (level >= 15) return 'C';
-  if (level >= 5) return 'D';
+  if (level >= 95) return 'National Level';
+  if (level >= 85) return 'S';
+  if (level >= 65) return 'A';
+  if (level >= 45) return 'B';
+  if (level >= 25) return 'C';
+  if (level >= 10) return 'D';
   return 'E';
 }
 

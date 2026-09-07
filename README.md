@@ -15,7 +15,7 @@
   * Physical: Push-ups (150), Squats (150), Sit-ups (100), Pull-ups (30), Plank (5 mins), Steps (10,000)
   * Intellect: Focused Study (1 hour)
 * **Dual-Track Progression Engine:**
-  * **Global Hunter Level:** Linear RPG formula `500 + 250 * (level - 1)` with rank promotions (Rank E to National Level).
+  * **Global Hunter Level:** Linear RPG formula `100 + 50 * (level - 1)` calibrated for a 360-day Level 100 Monarch journey with rank promotions (Rank E to National Level).
   * **5 Attribute Levels:** Dedicated level curves for **STR, VIT, AGI, INT, SENSE** with individual XP thresholds and sub-level progress bars.
 * **Idempotent Transaction Ledger:** Event-ledger pattern guaranteeing zero duplicate XP grants on page reloads or rapid logging.
 * **1-Tap Auto-Timers:** Integrated Plank Stopwatch and Study Pomodoro Focus Timer with automatic progress crediting.
