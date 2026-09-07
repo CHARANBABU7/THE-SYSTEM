@@ -307,7 +307,7 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const [dailyQuest, setDailyQuest] = useState<DailyQuestState>(() => {
     const saved = getStoredData();
-    if (saved?.dailyQuest && saved.dailyQuest.date === todayKey && Array.isArray(saved.dailyQuest.quests) && saved.dailyQuest.quests.length === 7) {
+    if (saved?.dailyQuest && typeof saved.dailyQuest.date === 'string' && Array.isArray(saved.dailyQuest.quests) && saved.dailyQuest.quests.length === 7) {
       const normalizedQuests = saved.dailyQuest.quests.map((q: QuestItem) => {
         if (q.id === 'study') {
           const isCompleted = q.current >= 60;
