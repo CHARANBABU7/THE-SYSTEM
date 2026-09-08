@@ -26,7 +26,12 @@ import {
   calculateAttributeLevel,
   calculateAttributeProgress
 } from '../utils/progression';
-import { getLocalDateKey, getMissedDateRange } from '../utils/dateUtils';
+import { 
+  getLocalDateKey, 
+  getMissedDateRange, 
+  calculateCurrentStreak, 
+  calculateBestStreak 
+} from '../utils/dateUtils';
 import { sound } from '../utils/audio';
 
 const STORAGE_KEY = 'SOLO_LEVELING_QUEST_V3';
@@ -55,8 +60,8 @@ const INITIAL_PROFILE: PlayerProfile = {
   title: 'The One Who Overcame Adversity',
   totalXP: 0,
   currentLevel: 1,
-  streakDays: 1,
-  bestStreak: 1,
+  streakDays: 0,
+  bestStreak: 0,
   totalDailyQuestsCompleted: 0,
   shieldsAvailable: 1,
   rank: 'E',
@@ -284,6 +289,12 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [profile, setProfile] = useState<PlayerProfile>(() => {
     const saved = getStoredData();
     const ledgerCount = Array.isArray(saved?.penaltyLedger) ? saved.penaltyLedger.length : 0;
+    const historyList = Array.isArray(saved?.history) ? saved.history : [];
+    const isTodaySafe = saved?.dailyQuest ? (saved.dailyQuest.isAllCompleted || saved.dailyQuest.isRestDay) : false;
+    const todayDate = saved?.dailyQuest?.date || todayKey;
+    const calculatedStreak = calculateCurrentStreak(historyList, todayDate, isTodaySafe);
+    const calculatedBest = calculateBestStreak(historyList, todayDate, isTodaySafe, saved?.profile?.bestStreak || 0);
+
     if (saved?.profile) {
       const totalXP = typeof saved.profile.totalXP === 'number' ? saved.profile.totalXP : (saved.profile.xp || 0);
       const currentLevel = calculateLevel(totalXP);
@@ -294,10 +305,17 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         totalXP,
         currentLevel,
         rank,
+        streakDays: calculatedStreak,
+        bestStreak: calculatedBest,
         penaltyCount: Math.max(saved.profile.penaltyCount || 0, ledgerCount),
       };
     }
-    return { ...INITIAL_PROFILE, penaltyCount: ledgerCount };
+    return { 
+      ...INITIAL_PROFILE, 
+      streakDays: calculatedStreak,
+      bestStreak: calculatedBest,
+      penaltyCount: ledgerCount 
+    };
   });
 
   const [history, setHistory] = useState<HistoryEntry[]>(() => {
@@ -448,6 +466,14 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       } else {
         // Safe rollover (e.g. yesterday was completed or rest day)
         sound.playQuestComplete();
+        const rolloverStreak = calculateCurrentStreak(history, currentLocalToday, false);
+        const rolloverBest = calculateBestStreak(history, currentLocalToday, false, profile.bestStreak);
+        setProfile(p => ({
+          ...p,
+          streakDays: rolloverStreak,
+          bestStreak: Math.max(p.bestStreak, rolloverBest),
+        }));
+
         addNotification(
           'NEW DAILY QUEST ARRIVED',
           'Welcome to a new day, Hunter. Daily conditioning protocols have reset.',
@@ -458,7 +484,7 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // Initialize clean 0-progress daily quest sheet for today
       setDailyQuest(getInitialDailyQuestState(currentLocalToday));
     }
-  }, [dailyQuest, history, penaltyLedger, addNotification]);
+  }, [dailyQuest, history, penaltyLedger, profile.bestStreak, addNotification]);
 
   // Periodic and on-focus rollover check
   useEffect(() => {
@@ -748,8 +774,26 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       '+100 SENSE XP (Perfect Day)'
     );
 
+    const updatedHistory: HistoryEntry[] = [
+      {
+        date: dailyQuest.date,
+        completed: true,
+        pushups: dailyQuest.quests.find(q => q.id === 'pushups')?.current || 0,
+        squats: dailyQuest.quests.find(q => q.id === 'squats')?.current || 0,
+        situps: dailyQuest.quests.find(q => q.id === 'situps')?.current || 0,
+        pullups: dailyQuest.quests.find(q => q.id === 'pullups')?.current || 0,
+        plankSeconds: dailyQuest.quests.find(q => q.id === 'plank')?.current || 0,
+        steps: dailyQuest.quests.find(q => q.id === 'steps')?.current || 0,
+        studyMinutes: dailyQuest.quests.find(q => q.id === 'study')?.current || 0,
+      },
+      ...history.filter(entry => entry.date !== dailyQuest.date),
+    ];
+
+    setHistory(updatedHistory);
+
     setProfile(prev => {
-      const nextStreak = prev.streakDays + 1;
+      const nextStreak = calculateCurrentStreak(updatedHistory, dailyQuest.date, true);
+      const nextBest = calculateBestStreak(updatedHistory, dailyQuest.date, true, prev.bestStreak);
       const nextCompleted = prev.totalDailyQuestsCompleted + 1;
       const shieldGained = nextCompleted % 7 === 0 ? 1 : 0;
 
@@ -766,26 +810,11 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return {
         ...prev,
         streakDays: nextStreak,
-        bestStreak: Math.max(prev.bestStreak, nextStreak),
+        bestStreak: nextBest,
         totalDailyQuestsCompleted: nextCompleted,
         shieldsAvailable: prev.shieldsAvailable + shieldGained,
       };
     });
-
-    setHistory(h => [
-      {
-        date: dailyQuest.date,
-        completed: true,
-        pushups: dailyQuest.quests.find(q => q.id === 'pushups')?.current || 0,
-        squats: dailyQuest.quests.find(q => q.id === 'squats')?.current || 0,
-        situps: dailyQuest.quests.find(q => q.id === 'situps')?.current || 0,
-        pullups: dailyQuest.quests.find(q => q.id === 'pullups')?.current || 0,
-        plankSeconds: dailyQuest.quests.find(q => q.id === 'plank')?.current || 0,
-        steps: dailyQuest.quests.find(q => q.id === 'steps')?.current || 0,
-        studyMinutes: dailyQuest.quests.find(q => q.id === 'study')?.current || 0,
-      },
-      ...h.filter(entry => entry.date !== dailyQuest.date),
-    ]);
 
     addNotification(
       'PERFECT DAY BONUS CLAIMED',
@@ -800,10 +829,7 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
 
     sound.playQuestComplete();
-    setProfile(p => ({ ...p, shieldsAvailable: p.shieldsAvailable - 1 }));
-    setDailyQuest(q => ({ ...q, isRestDay: true }));
-
-    setHistory(h => [
+    const updatedHistory: HistoryEntry[] = [
       {
         date: dailyQuest.date,
         completed: true,
@@ -816,8 +842,23 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         steps: 0,
         studyMinutes: 0,
       },
-      ...h.filter(entry => entry.date !== dailyQuest.date),
-    ]);
+      ...history.filter(entry => entry.date !== dailyQuest.date),
+    ];
+
+    setHistory(updatedHistory);
+
+    setProfile(p => {
+      const nextStreak = calculateCurrentStreak(updatedHistory, dailyQuest.date, true);
+      const nextBest = calculateBestStreak(updatedHistory, dailyQuest.date, true, p.bestStreak);
+      return {
+        ...p,
+        shieldsAvailable: p.shieldsAvailable - 1,
+        streakDays: nextStreak,
+        bestStreak: nextBest,
+      };
+    });
+
+    setDailyQuest(q => ({ ...q, isRestDay: true }));
 
     addNotification(
       'MONARCH AEGIS ACTIVATED',
@@ -941,14 +982,21 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           }
         }
 
-        setPenaltyLedger(validPenaltyLedger);
+        const validHistory = Array.isArray(parsed.history) ? parsed.history : [];
+        const finalDQ = parsed.dailyQuest?.date < currentLocalToday 
+          ? getInitialDailyQuestState(currentLocalToday) 
+          : (parsed.dailyQuest || getInitialDailyQuestState(currentLocalToday));
+        const isImportSafe = finalDQ ? (finalDQ.isAllCompleted || finalDQ.isRestDay) : false;
+        const importStreak = shouldActivatePenalty ? 0 : calculateCurrentStreak(validHistory, finalDQ.date, isImportSafe);
+        const importBest = calculateBestStreak(validHistory, finalDQ.date, isImportSafe, parsed.profile?.bestStreak || 0);
 
         setProfile({
           ...parsed.profile,
           totalXP,
           currentLevel,
           rank,
-          streakDays: shouldActivatePenalty ? 0 : (parsed.profile.streakDays || 0),
+          streakDays: importStreak,
+          bestStreak: importBest,
           penaltyCount: Math.max(0, validPenaltyLedger.length),
         });
 

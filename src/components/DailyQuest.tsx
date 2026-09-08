@@ -348,29 +348,13 @@ export const DailyQuest: React.FC = () => {
                     </button>
                   </>
                 ) : quest.id === 'steps' ? (
-                  <>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => addQuestProgress(quest.id, 1000)}
-                        className="px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-mono font-medium text-zinc-300 border border-white/[0.08] active:scale-95 transition-all"
-                      >
-                        +1k
-                      </button>
-                      <button
-                        onClick={() => addQuestProgress(quest.id, 2500)}
-                        className="px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-mono font-medium text-zinc-300 border border-white/[0.08] active:scale-95 transition-all"
-                      >
-                        +2.5k
-                      </button>
-                    </div>
-                    <button
-                      onClick={() => handleOpenAddModal(quest)}
-                      className="px-3 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-xs font-mono font-medium text-zinc-200 flex items-center space-x-1 active:scale-95 ml-auto transition-all"
-                    >
-                      <Plus className="w-3.5 h-3.5 text-cyan-400" />
-                      <span>Custom</span>
-                    </button>
-                  </>
+                  <button
+                    onClick={() => handleOpenAddModal(quest)}
+                    className="w-full py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-xs font-mono font-semibold text-cyan-300 border border-cyan-500/30 flex items-center justify-center space-x-1.5 active:scale-95 transition-all"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Log Steps</span>
+                  </button>
                 ) : (
                   <button
                     onClick={() => handleOpenAddModal(quest)}
@@ -612,14 +596,25 @@ export const DailyQuest: React.FC = () => {
                 </button>
               </div>
 
-              {/* Big Glowing Value Readout */}
+              {/* Big Glowing Value Readout with Direct Custom Input */}
               <div className="py-2">
                 <span className="text-[10px] font-mono uppercase tracking-widest text-cyan-400">
                   Amount to Add
                 </span>
-                <div className="text-5xl font-mono font-bold text-cyan-300 mt-1">
-                  +{sliderAmount.toLocaleString()}
-                  <span className="text-sm font-sans font-normal text-zinc-400 ml-1.5 uppercase">
+                <div className="flex items-center justify-center space-x-2 mt-2">
+                  <span className="text-3xl font-mono font-bold text-cyan-400/70">+</span>
+                  <input
+                    type="number"
+                    min={config.min}
+                    value={sliderAmount === 0 ? '' : sliderAmount}
+                    onChange={e => {
+                      const val = e.target.value === '' ? 0 : Math.max(0, parseInt(e.target.value, 10) || 0);
+                      setSliderAmount(val);
+                    }}
+                    className="w-36 bg-black/60 border border-cyan-500/40 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 text-center text-4xl font-mono font-bold text-cyan-300 rounded-2xl py-1 px-2 focus:outline-none transition-all shadow-inner"
+                    placeholder="0"
+                  />
+                  <span className="text-sm font-mono font-medium text-zinc-400 uppercase">
                     {unitLabel}
                   </span>
                 </div>
@@ -630,7 +625,7 @@ export const DailyQuest: React.FC = () => {
                 <input
                   type="range"
                   min={config.min}
-                  max={config.max}
+                  max={Math.max(config.max, sliderAmount || 0)}
                   step={config.step}
                   value={sliderAmount}
                   onChange={e => setSliderAmount(Number(e.target.value))}
@@ -641,28 +636,28 @@ export const DailyQuest: React.FC = () => {
                 <div className="flex items-center justify-between gap-1.5">
                   <button
                     type="button"
-                    onClick={() => setSliderAmount(prev => Math.max(config.min, prev - config.largeStep))}
+                    onClick={() => setSliderAmount(prev => Math.max(config.min, (prev || 0) - config.largeStep))}
                     className="flex-1 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-mono text-zinc-400 border border-white/[0.06] active:scale-95"
                   >
                     -{config.largeStep}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setSliderAmount(prev => Math.max(config.min, prev - config.smallStep))}
+                    onClick={() => setSliderAmount(prev => Math.max(config.min, (prev || 0) - config.smallStep))}
                     className="flex-1 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-mono text-zinc-400 border border-white/[0.06] active:scale-95"
                   >
                     -{config.smallStep}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setSliderAmount(prev => Math.min(config.max, prev + config.smallStep))}
+                    onClick={() => setSliderAmount(prev => (prev || 0) + config.smallStep)}
                     className="flex-1 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-mono text-zinc-200 border border-white/[0.06] active:scale-95"
                   >
                     +{config.smallStep}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setSliderAmount(prev => Math.min(config.max, prev + config.largeStep))}
+                    onClick={() => setSliderAmount(prev => (prev || 0) + config.largeStep)}
                     className="flex-1 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-mono text-zinc-200 border border-white/[0.06] active:scale-95"
                   >
                     +{config.largeStep}

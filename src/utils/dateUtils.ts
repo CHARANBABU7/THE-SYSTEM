@@ -44,3 +44,102 @@ export function getMissedDateRange(fromDateStr: string, toDateStr: string): stri
 
   return dates;
 }
+
+export interface StreakHistoryEntry {
+  date: string;
+  completed: boolean;
+  isRestDay?: boolean;
+}
+
+/**
+ * Calculates current unbroken consecutive streak.
+ * 
+ * Rules:
+ * 1. An unbroken streak increases for every consecutive day that is either:
+ *    - Completed (all quests cleared)
+ *    - Protected by a Rest Day (Monarch's Aegis)
+ * 2. If today is completed or a rest day: streak includes today and counts backward consecutively.
+ * 3. If today is NOT yet completed/rest: streak is yesterday's unbroken chain (so the player does not lose their streak during the active day).
+ * 4. If yesterday was skipped/missed (not completed, not rest day): streak is 0 (or 1 if today is completed).
+ */
+export function calculateCurrentStreak(
+  history: StreakHistoryEntry[],
+  todayDateStr: string,
+  isTodaySafe: boolean
+): number {
+  let streak = 0;
+
+  if (isTodaySafe) {
+    streak = 1;
+    let checkDate = addDaysToDateKey(todayDateStr, -1);
+    while (true) {
+      const entry = history.find(h => h.date === checkDate);
+      if (entry && (entry.completed || entry.isRestDay)) {
+        streak += 1;
+        checkDate = addDaysToDateKey(checkDate, -1);
+      } else {
+        break;
+      }
+    }
+  } else {
+    let checkDate = addDaysToDateKey(todayDateStr, -1);
+    while (true) {
+      const entry = history.find(h => h.date === checkDate);
+      if (entry && (entry.completed || entry.isRestDay)) {
+        streak += 1;
+        checkDate = addDaysToDateKey(checkDate, -1);
+      } else {
+        break;
+      }
+    }
+  }
+
+  return streak;
+}
+
+/**
+ * Calculates the all-time highest unbroken streak from history logs.
+ */
+export function calculateBestStreak(
+  history: StreakHistoryEntry[],
+  todayDateStr: string,
+  isTodaySafe: boolean,
+  storedBestStreak: number = 0
+): number {
+  const currentStreak = calculateCurrentStreak(history, todayDateStr, isTodaySafe);
+
+  const validDates = new Set(
+    history
+      .filter(h => h.completed || h.isRestDay)
+      .map(h => h.date)
+  );
+
+  if (isTodaySafe) {
+    validDates.add(todayDateStr);
+  }
+
+  const sortedDates = Array.from(validDates).sort();
+  let maxChain = 0;
+  let currentChain = 0;
+  let prevDate: string | null = null;
+
+  for (const d of sortedDates) {
+    if (!prevDate) {
+      currentChain = 1;
+    } else {
+      const expectedNext = addDaysToDateKey(prevDate, 1);
+      if (d === expectedNext) {
+        currentChain += 1;
+      } else {
+        currentChain = 1;
+      }
+    }
+    if (currentChain > maxChain) {
+      maxChain = currentChain;
+    }
+    prevDate = d;
+  }
+
+  return Math.max(storedBestStreak, currentStreak, maxChain);
+}
+
