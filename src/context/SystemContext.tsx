@@ -17,7 +17,8 @@ import {
   PlayerAttributeProgressMap,
   PenaltyState,
   PenaltyDrillItem,
-  PenaltyLedgerEvent
+  PenaltyLedgerEvent,
+  SpecialQuest
 } from '../types';
 import { 
   calculateLevel, 
@@ -177,9 +178,22 @@ const getInitialDailyQuests = (): QuestItem[] => [
   },
 ];
 
+export const BIRTHDAY_SPECIAL_QUEST: SpecialQuest = {
+  id: 'special-21k-run',
+  title: 'URGENT QUEST · 20TH BIRTHDAY SPECIAL PROTOCOL',
+  subtitle: '21.0 km Half-Marathon Endurance Run',
+  target: 21.0,
+  current: 0,
+  unit: 'km',
+  xpReward: 500,
+  attributeXpReward: 500,
+  isCompleted: false,
+};
+
 const getInitialDailyQuestState = (dateStr: string = getLocalDateKey()): DailyQuestState => ({
   date: dateStr,
   quests: getInitialDailyQuests(),
+  specialQuest: { ...BIRTHDAY_SPECIAL_QUEST },
   isAllCompleted: false,
   completionBonusClaimed: false,
   completionBonusXp: 300,
@@ -220,6 +234,8 @@ interface SystemContextType {
   awardXP: (amount: number, source: XPSource | string, date: string, label?: string) => boolean;
   awardAttributeXP: (attribute: AttributeKey, amount: number, source: string, date: string, label?: string) => boolean;
   addQuestProgress: (questId: QuestType, amount: number) => void;
+  logSpecialQuestDistance: (km: number) => void;
+  resetSpecialQuest: () => void;
   updatePenaltyDrillProgress: (drillId: string, amount: number) => void;
   claimDailyCompletionBonus: () => void;
   activateRestDay: () => boolean;
@@ -337,6 +353,7 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return {
         ...saved.dailyQuest,
         quests: normalizedQuests,
+        specialQuest: saved.dailyQuest?.specialQuest || { ...BIRTHDAY_SPECIAL_QUEST },
         isAllCompleted: isAllCompleted || saved.dailyQuest.isAllCompleted,
       };
     }
@@ -646,6 +663,12 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Cumulative progress accumulator
   const addQuestProgress = (questId: QuestType, amount: number) => {
     if (amount <= 0 || dailyQuest.isRestDay || penaltyState.isActive) return;
+    const isUrgentActiveToday = getLocalDateKey() >= '2026-09-10';
+    if (dailyQuest.specialQuest && !dailyQuest.specialQuest.isCompleted && isUrgentActiveToday) {
+      sound.playPenaltySiren();
+      addNotification('ACCESS DENIED', 'Standard protocols are locked while an Urgent Quest is active!', 'warning');
+      return;
+    }
     sound.playStatPoint();
 
     // 1. Update lifetime metrics
@@ -727,6 +750,77 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         isAllCompleted: allDone,
       };
     });
+  };
+
+  const logSpecialQuestDistance = (km: number) => {
+    if (km <= 0) return;
+    sound.playStatPoint();
+
+    const stepsEstimated = Math.round(km * 1300);
+
+    setProfile(prev => ({
+      ...prev,
+      lifetimeSteps: prev.lifetimeSteps + stepsEstimated,
+    }));
+
+    addQuestProgress('steps', stepsEstimated);
+
+    setDailyQuest(prev => {
+      const currentSpecial = prev.specialQuest || { ...BIRTHDAY_SPECIAL_QUEST };
+      const nextCurrent = parseFloat(Math.min(currentSpecial.target, currentSpecial.current + km).toFixed(1));
+      const isNowCompleted = nextCurrent >= currentSpecial.target;
+      const justCompleted = isNowCompleted && !currentSpecial.isCompleted;
+
+      const updatedSpecial: SpecialQuest = {
+        ...currentSpecial,
+        current: nextCurrent,
+        isCompleted: isNowCompleted,
+        completedAt: justCompleted ? new Date().toLocaleTimeString() : currentSpecial.completedAt,
+      };
+
+      if (justCompleted) {
+        sound.playLevelUp();
+        awardXP(updatedSpecial.xpReward, 'special_quest_21k', prev.date, '21K SPECIAL QUEST');
+        awardAttributeXP('agi', updatedSpecial.attributeXpReward, `attr_agi_21k_${prev.date}`, prev.date, '+500 AGI XP (21K Quest)');
+        awardAttributeXP('vit', updatedSpecial.attributeXpReward, `attr_vit_21k_${prev.date}`, prev.date, '+500 VIT XP (21K Quest)');
+
+        const updatedQuests = prev.quests.map(q => {
+          if (q.category === 'physical') {
+            return { ...q, current: q.target, isCompleted: true };
+          }
+          return q;
+        });
+
+        setTimeout(() => {
+          addNotification(
+            'URGENT QUEST CLEARED',
+            '21.0 km Birthday Protocol Completed! +500 Global EXP, +500 AGI, +500 VIT awarded. Physical protocols fulfilled.',
+            'reward'
+          );
+        }, 300);
+
+        return {
+          ...prev,
+          specialQuest: updatedSpecial,
+          quests: updatedQuests,
+          isAllCompleted: true,
+        };
+      }
+
+      return {
+        ...prev,
+        specialQuest: updatedSpecial,
+      };
+    });
+  };
+
+  const resetSpecialQuest = () => {
+    sound.playStatPoint();
+    setDailyQuest(prev => ({
+      ...prev,
+      specialQuest: { ...BIRTHDAY_SPECIAL_QUEST },
+    }));
+    addNotification('QUEST RESET', '20th Birthday Special Protocol reset to 0.0 km.', 'info');
   };
 
   /**
@@ -1064,6 +1158,8 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         awardXP,
         awardAttributeXP,
         addQuestProgress,
+        logSpecialQuestDistance,
+        resetSpecialQuest,
         updatePenaltyDrillProgress,
         claimDailyCompletionBonus,
         activateRestDay,

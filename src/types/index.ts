@@ -65,9 +65,23 @@ export interface QuestItem {
   isCompleted: boolean;
 }
 
+export interface SpecialQuest {
+  id: string;
+  title: string;
+  subtitle: string;
+  target: number; // 21.0 km
+  current: number;
+  unit: string;
+  xpReward: number; // 500 Global XP
+  attributeXpReward: number; // 500 AGI, 500 VIT
+  isCompleted: boolean;
+  completedAt?: string;
+}
+
 export interface DailyQuestState {
   date: string; // YYYY-MM-DD
   quests: QuestItem[];
+  specialQuest?: SpecialQuest | null;
   isAllCompleted: boolean;
   completionBonusClaimed: boolean;
   completionBonusXp: number; // 300 Global XP

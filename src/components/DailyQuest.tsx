@@ -13,16 +13,21 @@ import {
   RotateCcw, 
   Shield,
   Timer,
-  Minus
+  Minus,
+  AlertTriangle,
+  Zap,
+  Lock
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { useSystem } from '../context/SystemContext';
+import { useSystem, BIRTHDAY_SPECIAL_QUEST } from '../context/SystemContext';
 import { QuestItem } from '../types';
 
 export const DailyQuest: React.FC = () => {
   const { 
     dailyQuest, 
     addQuestProgress, 
+    logSpecialQuestDistance,
+    resetSpecialQuest,
     claimDailyCompletionBonus,
     activateRestDay,
     profile,
@@ -178,6 +183,11 @@ export const DailyQuest: React.FC = () => {
     return { min: 1, max: quest.target, step: 1, smallStep: 1, largeStep: 5 };
   };
 
+  const specialQuest = dailyQuest.specialQuest || BIRTHDAY_SPECIAL_QUEST;
+  const todayKey = new Date().toISOString().split('T')[0];
+  const isUpcoming = todayKey < '2026-09-10';
+  const isUrgentActive = Boolean(specialQuest && !specialQuest.isCompleted && !isUpcoming);
+
   return (
     <div className="space-y-4 pb-24">
       {/* Floating XP Animation Container */}
@@ -193,6 +203,165 @@ export const DailyQuest: React.FC = () => {
           </div>
         ))}
       </div>
+
+      {/* Anime-Style URGENT QUEST / UPCOMING EVENT Card */}
+      {specialQuest && (
+        <div className={`p-4 rounded-2xl border transition-all duration-300 relative overflow-hidden ${
+          specialQuest.isCompleted
+            ? 'bg-emerald-950/25 border-emerald-500/30 shadow-[0_0_20px_rgba(16,185,129,0.15)]'
+            : isUpcoming
+            ? 'bg-gradient-to-b from-purple-950/40 via-black/80 to-amber-950/30 border-amber-500/30 shadow-[0_0_25px_rgba(245,158,11,0.15)]'
+            : 'bg-gradient-to-b from-rose-950/40 via-black/80 to-black/90 border-rose-500/40 shadow-[0_0_25px_rgba(244,63,94,0.2)]'
+        }`}>
+          {/* Top glow accent */}
+          <div className={`absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent ${
+            isUpcoming ? 'via-amber-500' : 'via-rose-500'
+          } to-transparent`} />
+
+          {/* Header Badge */}
+          <div className="flex items-center justify-between border-b border-white/[0.08] pb-2.5 mb-3">
+            <div className="flex items-center space-x-2">
+              {isUpcoming ? (
+                <span className="inline-flex items-center space-x-1 font-display font-black text-xs tracking-wider uppercase px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse">
+                  <Clock className="w-3.5 h-3.5 mr-1 text-amber-400" />
+                  <span>UPCOMING EVENT</span>
+                </span>
+              ) : (
+                <span className={`inline-flex items-center space-x-1 font-display font-black text-xs tracking-wider uppercase px-2 py-0.5 rounded ${
+                  specialQuest.isCompleted 
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    : 'bg-rose-500/20 text-rose-300 border border-rose-500/30 animate-pulse'
+                }`}>
+                  <AlertTriangle className="w-3.5 h-3.5 mr-1" />
+                  <span>URGENT QUEST</span>
+                </span>
+              )}
+              <span className="text-[10px] uppercase font-mono tracking-wider text-amber-400 bg-amber-950/30 px-2 py-0.5 rounded border border-amber-500/20">
+                Birthday Protocol
+              </span>
+            </div>
+
+            {specialQuest.isCompleted ? (
+              <span className="flex items-center text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/25">
+                <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> CLEARED
+              </span>
+            ) : isUpcoming ? (
+              <div className="flex items-center space-x-1 text-xs font-mono font-bold text-amber-400 bg-amber-950/40 px-2.5 py-1 rounded-lg border border-amber-500/30">
+                <Clock className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                <span>Unlocks in {String(timeLeft.hours).padStart(2, '0')}:{String(timeLeft.minutes).padStart(2, '0')}:{String(timeLeft.seconds).padStart(2, '0')}</span>
+              </div>
+            ) : (
+              <span className="text-[10px] font-mono text-rose-400 font-bold bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20">
+                ACTIVE
+              </span>
+            )}
+          </div>
+
+          {/* Quest Info */}
+          <div className="flex items-start justify-between mb-3">
+            <div>
+              <h3 className="font-display font-bold text-base text-zinc-100 flex items-center space-x-2">
+                <span>{specialQuest.title}</span>
+              </h3>
+              <p className="text-xs text-zinc-300 mt-0.5">
+                {specialQuest.subtitle}
+              </p>
+              <div className="flex items-center space-x-2 mt-1.5 text-[11px] font-mono text-cyan-400">
+                <Zap className="w-3 h-3 text-amber-400" />
+                <span>+{specialQuest.xpReward} Global EXP · +{specialQuest.attributeXpReward} AGI · +{specialQuest.attributeXpReward} VIT</span>
+              </div>
+            </div>
+
+            <div className="text-right">
+              <div className="font-mono font-black text-lg text-amber-300">
+                {specialQuest.current.toFixed(1)} <span className="text-xs text-zinc-400">/ {specialQuest.target.toFixed(1)} km</span>
+              </div>
+              <div className="text-[10px] text-zinc-400 font-mono">
+                {isUpcoming ? 'Starts at Midnight' : `${Math.min(100, Math.floor((specialQuest.current / specialQuest.target) * 100))}% Completed`}
+              </div>
+            </div>
+          </div>
+
+          {/* Progress Bar */}
+          <div className="w-full h-2 rounded-full bg-zinc-900 overflow-hidden mb-3 border border-white/[0.06]">
+            <div
+              className={`h-full transition-all duration-500 ${
+                specialQuest.isCompleted
+                  ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                  : isUpcoming
+                  ? 'bg-gradient-to-r from-purple-500 via-indigo-500 to-amber-500'
+                  : 'bg-gradient-to-r from-rose-500 via-amber-500 to-orange-400'
+              }`}
+              style={{
+                width: isUpcoming ? '100%' : `${Math.min(100, (specialQuest.current / specialQuest.target) * 100)}%`,
+              }}
+            />
+          </div>
+
+          {/* Action Log Buttons */}
+          {isUpcoming ? (
+            <div className="flex items-center justify-center p-2.5 rounded-xl bg-amber-950/20 border border-amber-500/25 text-amber-300/90 text-xs font-mono font-semibold space-x-2">
+              <Lock className="w-3.5 h-3.5 text-amber-400" />
+              <span>LOCKED UNTIL 12:00 AM MIDNIGHT · PROTOCOL ACTIVATES AT DAWN</span>
+            </div>
+          ) : !specialQuest.isCompleted ? (
+            <div className="flex items-center justify-between gap-1.5 flex-wrap pt-1 border-t border-white/[0.06]">
+              <span className="text-[10px] text-zinc-400 font-mono">Log Distance:</span>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  onClick={() => logSpecialQuestDistance(1.0)}
+                  className="px-2.5 py-1 text-xs font-mono font-medium rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-zinc-200 border border-white/[0.08] transition-all hover:scale-105"
+                >
+                  +1 km
+                </button>
+                <button
+                  onClick={() => logSpecialQuestDistance(5.0)}
+                  className="px-2.5 py-1 text-xs font-mono font-medium rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-zinc-200 border border-white/[0.08] transition-all hover:scale-105"
+                >
+                  +5 km
+                </button>
+                <button
+                  onClick={() => logSpecialQuestDistance(10.0)}
+                  className="px-2.5 py-1 text-xs font-mono font-medium rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-zinc-200 border border-white/[0.08] transition-all hover:scale-105"
+                >
+                  +10 km
+                </button>
+                <button
+                  onClick={() => {
+                    const remaining = parseFloat((specialQuest.target - specialQuest.current).toFixed(1));
+                    if (remaining > 0) {
+                      logSpecialQuestDistance(remaining);
+                      confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+                    }
+                  }}
+                  className="px-3 py-1 text-xs font-mono font-bold rounded-lg bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white shadow-lg shadow-rose-900/30 transition-all hover:scale-105 flex items-center space-x-1"
+                >
+                  <Sparkles className="w-3 h-3 mr-1" />
+                  <span>Complete (21.0 km)</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-500/20 space-y-2">
+              <div className="text-center">
+                <span className="text-xs font-mono font-semibold text-emerald-300">
+                  🎉 Protocol Cleared at {specialQuest.completedAt || 'Dawn'}. Physical drills fulfilled for the day!
+                </span>
+              </div>
+              <div className="flex items-center justify-between pt-2 border-t border-emerald-500/15">
+                <span className="text-[10px] text-zinc-400 font-mono">Test Mode:</span>
+                <button
+                  onClick={resetSpecialQuest}
+                  className="flex items-center space-x-1 px-2.5 py-1 text-xs font-mono font-semibold text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 rounded-lg border border-amber-500/25 transition-all hover:scale-105"
+                >
+                  <RotateCcw className="w-3 h-3 mr-1 text-amber-400" />
+                  <span>Reset to 0.0 km for Tomorrow</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Quest Header Card: Obsidian HUD Theme */}
       <div className="system-card rounded-2xl p-4 border-cyan-500/20 relative overflow-hidden">
@@ -266,6 +435,22 @@ export const DailyQuest: React.FC = () => {
         </div>
       </div>
 
+      {/* Anime System Override: Protocols Locked Banner */}
+      {isUrgentActive && (
+        <div className="system-card p-4 rounded-2xl border-rose-500/30 bg-gradient-to-r from-rose-950/40 via-black/80 to-rose-950/40 text-center space-y-1.5 shadow-[0_0_20px_rgba(244,63,94,0.15)]">
+          <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-300 font-mono text-xs font-bold animate-pulse">
+            <Lock className="w-3.5 h-3.5 mr-1 text-rose-400" />
+            <span>SYSTEM OVERRIDE · PROTOCOLS LOCKED</span>
+          </div>
+          <p className="text-xs text-zinc-300 font-medium">
+            Daily conditioning drills are suspended while the 21.0 km Birthday Urgent Quest is active.
+          </p>
+          <p className="text-[11px] text-zinc-500 font-mono">
+            Focus all energy on the Endurance Protocol to clear requirements.
+          </p>
+        </div>
+      )}
+
       {/* SECTION 1: PHYSICAL CONDITIONING (6 Quests) */}
       <div className="space-y-2">
         <div className="flex items-center justify-between px-1">
@@ -273,7 +458,9 @@ export const DailyQuest: React.FC = () => {
             <Flame className="w-3.5 h-3.5 text-cyan-400" />
             <span>PHYSICAL CONDITIONING</span>
           </span>
-          <span className="text-[10px] text-zinc-500 font-mono">6 Quests</span>
+          <span className="text-[10px] text-zinc-500 font-mono">
+            {isUrgentActive ? 'Locked' : '6 Quests'}
+          </span>
         </div>
 
         {physicalQuests.map(quest => {
@@ -283,6 +470,8 @@ export const DailyQuest: React.FC = () => {
             <div
               key={quest.id}
               className={`p-3.5 rounded-2xl border transition-all ${
+                isUrgentActive ? 'opacity-60 border-rose-500/15' : ''
+              } ${
                 quest.isCompleted
                   ? 'bg-emerald-950/20 border-emerald-500/25'
                   : 'system-card border-white/[0.06] hover:border-cyan-500/20'
@@ -330,7 +519,12 @@ export const DailyQuest: React.FC = () => {
 
               {/* Minimalist Action Controls */}
               <div className="flex items-center justify-between gap-1.5 pt-0.5">
-                {quest.id === 'plank' ? (
+                {isUrgentActive ? (
+                  <div className="w-full py-2 rounded-xl bg-rose-950/20 border border-rose-500/20 text-rose-400/80 text-xs font-mono font-semibold flex items-center justify-center space-x-1.5 cursor-not-allowed select-none">
+                    <Lock className="w-3.5 h-3.5 text-rose-400" />
+                    <span>LOCKED · COMPLETE URGENT QUEST FIRST</span>
+                  </div>
+                ) : quest.id === 'plank' ? (
                   <>
                     <button
                       onClick={() => handleOpenTimer(quest)}
@@ -387,6 +581,8 @@ export const DailyQuest: React.FC = () => {
             <div
               key={quest.id}
               className={`p-3.5 rounded-2xl border transition-all ${
+                isUrgentActive ? 'opacity-60 border-rose-500/15' : ''
+              } ${
                 quest.isCompleted
                   ? 'bg-purple-950/20 border-purple-500/25'
                   : 'system-card border-white/[0.06] hover:border-purple-500/20'
@@ -431,21 +627,30 @@ export const DailyQuest: React.FC = () => {
 
               {/* Minimalist Study Actions */}
               <div className="flex items-center justify-between gap-2 pt-0.5">
-                <button
-                  onClick={() => handleOpenTimer(quest)}
-                  className="flex-1 py-1.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-xs font-mono font-semibold text-purple-300 border border-purple-500/30 flex items-center justify-center space-x-1.5 active:scale-95 transition-all"
-                >
-                  <Timer className="w-3.5 h-3.5 text-purple-400" />
-                  <span>Focus Timer</span>
-                </button>
+                {isUrgentActive ? (
+                  <div className="w-full py-2 rounded-xl bg-rose-950/20 border border-rose-500/20 text-rose-400/80 text-xs font-mono font-semibold flex items-center justify-center space-x-1.5 cursor-not-allowed select-none">
+                    <Lock className="w-3.5 h-3.5 text-rose-400" />
+                    <span>LOCKED · COMPLETE URGENT QUEST FIRST</span>
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => handleOpenTimer(quest)}
+                      className="flex-1 py-1.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-xs font-mono font-semibold text-purple-300 border border-purple-500/30 flex items-center justify-center space-x-1.5 active:scale-95 transition-all"
+                    >
+                      <Timer className="w-3.5 h-3.5 text-purple-400" />
+                      <span>Focus Timer</span>
+                    </button>
 
-                <button
-                  onClick={() => handleOpenAddModal(quest)}
-                  className="px-4 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-xs font-mono font-medium text-zinc-200 flex items-center space-x-1 active:scale-95 transition-all"
-                >
-                  <Plus className="w-3.5 h-3.5 text-purple-400" />
-                  <span>Log Time</span>
-                </button>
+                    <button
+                      onClick={() => handleOpenAddModal(quest)}
+                      className="px-4 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-xs font-mono font-medium text-zinc-200 flex items-center space-x-1 active:scale-95 transition-all"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-purple-400" />
+                      <span>Log Time</span>
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           );
