@@ -193,7 +193,7 @@ export const BIRTHDAY_SPECIAL_QUEST: SpecialQuest = {
 const getInitialDailyQuestState = (dateStr: string = getLocalDateKey()): DailyQuestState => ({
   date: dateStr,
   quests: getInitialDailyQuests(),
-  specialQuest: { ...BIRTHDAY_SPECIAL_QUEST },
+  specialQuest: dateStr === '2026-09-10' ? { ...BIRTHDAY_SPECIAL_QUEST } : null,
   isAllCompleted: false,
   completionBonusClaimed: false,
   completionBonusXp: 300,
@@ -350,10 +350,13 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         return q;
       });
       const isAllCompleted = normalizedQuests.every((q: QuestItem) => q.isCompleted);
+      const isBirthdayProtocolDay = todayKey === '2026-09-10';
       return {
         ...saved.dailyQuest,
         quests: normalizedQuests,
-        specialQuest: saved.dailyQuest?.specialQuest || { ...BIRTHDAY_SPECIAL_QUEST },
+        specialQuest: isBirthdayProtocolDay
+          ? (saved.dailyQuest?.specialQuest || { ...BIRTHDAY_SPECIAL_QUEST })
+          : null,
         isAllCompleted: isAllCompleted || saved.dailyQuest.isAllCompleted,
       };
     }
@@ -663,7 +666,7 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Cumulative progress accumulator
   const addQuestProgress = (questId: QuestType, amount: number) => {
     if (amount <= 0 || dailyQuest.isRestDay || penaltyState.isActive) return;
-    const isUrgentActiveToday = getLocalDateKey() >= '2026-09-10';
+    const isUrgentActiveToday = getLocalDateKey() === '2026-09-10';
     if (dailyQuest.specialQuest && !dailyQuest.specialQuest.isCompleted && isUrgentActiveToday) {
       sound.playPenaltySiren();
       addNotification('ACCESS DENIED', 'Standard protocols are locked while an Urgent Quest is active!', 'warning');

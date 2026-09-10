@@ -21,6 +21,7 @@ import {
 import confetti from 'canvas-confetti';
 import { useSystem, BIRTHDAY_SPECIAL_QUEST } from '../context/SystemContext';
 import { QuestItem } from '../types';
+import { getLocalDateKey } from '../utils/dateUtils';
 
 export const DailyQuest: React.FC = () => {
   const { 
@@ -183,10 +184,11 @@ export const DailyQuest: React.FC = () => {
     return { min: 1, max: quest.target, step: 1, smallStep: 1, largeStep: 5 };
   };
 
-  const specialQuest = dailyQuest.specialQuest || BIRTHDAY_SPECIAL_QUEST;
-  const todayKey = new Date().toISOString().split('T')[0];
-  const isUpcoming = todayKey < '2026-09-10';
-  const isUrgentActive = Boolean(specialQuest && !specialQuest.isCompleted && !isUpcoming);
+  const todayKey = getLocalDateKey();
+  const isBirthdayProtocolDay = todayKey === '2026-09-10';
+  const specialQuest = isBirthdayProtocolDay ? (dailyQuest.specialQuest || BIRTHDAY_SPECIAL_QUEST) : null;
+  const isUpcoming = false; // Officially unlocked for September 10th!
+  const isUrgentActive = Boolean(specialQuest && !specialQuest.isCompleted);
 
   return (
     <div className="space-y-4 pb-24">
@@ -355,7 +357,7 @@ export const DailyQuest: React.FC = () => {
                   className="flex items-center space-x-1 px-2.5 py-1 text-xs font-mono font-semibold text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 rounded-lg border border-amber-500/25 transition-all hover:scale-105"
                 >
                   <RotateCcw className="w-3 h-3 mr-1 text-amber-400" />
-                  <span>Reset to 0.0 km for Tomorrow</span>
+                  <span>Reset to 0.0 km</span>
                 </button>
               </div>
             </div>
