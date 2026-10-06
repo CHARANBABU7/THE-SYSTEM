@@ -16,11 +16,12 @@ import {
   Minus,
   AlertTriangle,
   Zap,
-  Lock
+  Lock,
+  SlidersHorizontal
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useSystem, BIRTHDAY_SPECIAL_QUEST } from '../context/SystemContext';
-import { QuestItem } from '../types';
+import { QuestItem, CustomQuestTargets } from '../types';
 import { getLocalDateKey } from '../utils/dateUtils';
 
 export const DailyQuest: React.FC = () => {
@@ -32,8 +33,14 @@ export const DailyQuest: React.FC = () => {
     claimDailyCompletionBonus,
     activateRestDay,
     profile,
-    floatingXp 
+    floatingXp,
+    customTargets,
+    updateCustomTargets
   } = useSystem();
+
+  // Custom Protocol Goals Modal State
+  const [showTargetModal, setShowTargetModal] = useState<boolean>(false);
+  const [tempTargets, setTempTargets] = useState<CustomQuestTargets>(customTargets);
 
   // Scroller Modal State
   const [activeModalQuest, setActiveModalQuest] = useState<QuestItem | null>(null);
@@ -374,9 +381,18 @@ export const DailyQuest: React.FC = () => {
               DAILY CONDITIONING PROTOCOL
             </h2>
           </div>
-          <span className="text-[10px] font-mono text-cyan-400/80 bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-500/30">
-            SOLO LEVELING
-          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setTempTargets({ ...customTargets });
+              setShowTargetModal(true);
+            }}
+            className="flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-cyan-950/60 hover:bg-cyan-900/60 border border-cyan-500/40 text-cyan-300 font-mono text-xs transition-all hover:scale-105 shadow-cyan-hairline"
+            title="Recalibrate Daily Goals"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-400" />
+            <span>EDIT GOALS</span>
+          </button>
         </div>
 
         {/* Countdown & Status */}
@@ -893,6 +909,201 @@ export const DailyQuest: React.FC = () => {
           </div>
         );
       })()}
+
+      {/* Custom Protocol Goals Modal */}
+      {showTargetModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="system-card bg-[#030712]/95 border-cyan-500/30 w-full max-w-md max-h-[90vh] flex flex-col rounded-3xl p-5 shadow-obsidian-card relative animate-modal-pop overflow-hidden">
+            {/* Header glow */}
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-cyan-400 to-transparent" />
+
+            <div className="flex items-center justify-between pb-3 border-b border-white/[0.08]">
+              <div className="flex items-center space-x-2">
+                <div className="p-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
+                  <SlidersHorizontal className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-display font-bold text-sm tracking-wider uppercase text-zinc-100">
+                    RECALIBRATE PROTOCOL
+                  </h3>
+                  <p className="text-[10px] text-zinc-400 font-mono">
+                    Set daily targets you can sustain consistently
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowTargetModal(false)}
+                className="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-white/[0.05]"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body - Scrollable */}
+            <div className="flex-1 overflow-y-auto py-3 space-y-4 pr-1">
+              {/* Presets */}
+              <div className="space-y-1.5">
+                <span className="text-[10px] font-mono uppercase tracking-widest text-zinc-400">
+                  Quick Presets
+                </span>
+                <div className="grid grid-cols-3 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setTempTargets({
+                      pushups: 30,
+                      squats: 30,
+                      situps: 20,
+                      pullups: 5,
+                      plank: 60,
+                      steps: 4000,
+                      study: 25,
+                    })}
+                    className="p-2 rounded-xl bg-cyan-950/20 hover:bg-cyan-900/30 border border-cyan-500/20 text-left transition-all hover:scale-[1.02]"
+                  >
+                    <div className="text-[11px] font-bold text-cyan-300">Starter</div>
+                    <div className="text-[9px] text-zinc-400 font-mono mt-0.5">30 reps · 1m plank</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setTempTargets({
+                      pushups: 50,
+                      squats: 50,
+                      situps: 30,
+                      pullups: 10,
+                      plank: 120,
+                      steps: 7000,
+                      study: 45,
+                    })}
+                    className="p-2 rounded-xl bg-cyan-950/20 hover:bg-cyan-900/30 border border-cyan-500/20 text-left transition-all hover:scale-[1.02]"
+                  >
+                    <div className="text-[11px] font-bold text-cyan-300">Balanced</div>
+                    <div className="text-[9px] text-zinc-400 font-mono mt-0.5">50 reps · 2m plank</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setTempTargets({
+                      pushups: 150,
+                      squats: 150,
+                      situps: 100,
+                      pullups: 30,
+                      plank: 300,
+                      steps: 10000,
+                      study: 60,
+                    })}
+                    className="p-2 rounded-xl bg-purple-950/20 hover:bg-purple-900/30 border border-purple-500/25 text-left transition-all hover:scale-[1.02]"
+                  >
+                    <div className="text-[11px] font-bold text-purple-300">Monarch</div>
+                    <div className="text-[9px] text-zinc-400 font-mono mt-0.5">150 reps · 5m plank</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Individual Drill Configuration */}
+              <div className="space-y-2">
+                <span className="text-[10px] font-mono uppercase tracking-widest text-zinc-400">
+                  Custom Targets
+                </span>
+
+                {[
+                  { id: 'pushups', name: 'Push-ups', icon: '💪', unit: 'reps', step: 5, min: 5, max: 500 },
+                  { id: 'squats', name: 'Squats', icon: '🦵', unit: 'reps', step: 5, min: 5, max: 500 },
+                  { id: 'situps', name: 'Sit-ups', icon: '🧘', unit: 'reps', step: 5, min: 5, max: 500 },
+                  { id: 'pullups', name: 'Pull-ups', icon: '🧗', unit: 'reps', step: 1, min: 1, max: 100 },
+                  { id: 'plank', name: 'Plank', icon: '⏱️', unit: 'sec', step: 15, min: 15, max: 900, isPlank: true },
+                  { id: 'steps', name: 'Daily Steps', icon: '🏃', unit: 'steps', step: 500, min: 1000, max: 50000 },
+                  { id: 'study', name: 'Focused Study', icon: '🧠', unit: 'min', step: 5, min: 5, max: 300 },
+                ].map(item => {
+                  const val = tempTargets[item.id as keyof CustomQuestTargets] || 0;
+                  return (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between p-2.5 rounded-xl bg-black/40 border border-white/[0.05]"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <span className="text-base">{item.icon}</span>
+                        <div>
+                          <div className="text-xs font-semibold text-zinc-200">{item.name}</div>
+                          {item.isPlank && (
+                            <div className="text-[9px] font-mono text-zinc-500">
+                              {val >= 60 ? `${(val / 60).toFixed(1)} min` : `${val}s`}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center space-x-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setTempTargets(prev => ({
+                            ...prev,
+                            [item.id]: Math.max(item.min, (prev[item.id as keyof CustomQuestTargets] || 0) - item.step),
+                          }))}
+                          className="w-7 h-7 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-zinc-400 hover:text-zinc-200 text-xs font-mono flex items-center justify-center border border-white/[0.06] active:scale-95"
+                        >
+                          -
+                        </button>
+
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min={item.min}
+                            max={item.max}
+                            value={val === 0 ? '' : val}
+                            onChange={e => {
+                              const num = e.target.value === '' ? 0 : Math.max(0, parseInt(e.target.value, 10) || 0);
+                              setTempTargets(prev => ({ ...prev, [item.id]: num }));
+                            }}
+                            className="w-16 py-1 px-1.5 text-center text-xs font-mono font-bold text-cyan-300 bg-black/80 border border-cyan-500/30 rounded-lg focus:border-cyan-400 focus:outline-none"
+                          />
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setTempTargets(prev => ({
+                            ...prev,
+                            [item.id]: (prev[item.id as keyof CustomQuestTargets] || 0) + item.step,
+                          }))}
+                          className="w-7 h-7 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-zinc-400 hover:text-zinc-200 text-xs font-mono flex items-center justify-center border border-white/[0.06] active:scale-95"
+                        >
+                          +
+                        </button>
+
+                        <span className="text-[10px] font-mono text-zinc-500 w-8 text-right">
+                          {item.unit}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="pt-3 border-t border-white/[0.08] flex items-center space-x-2">
+              <button
+                type="button"
+                onClick={() => setShowTargetModal(false)}
+                className="flex-1 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-xs font-mono text-zinc-400 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  updateCustomTargets(tempTargets);
+                  setShowTargetModal(false);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-xs font-display font-bold text-black transition-all shadow-obsidian-glow active:scale-95"
+              >
+                ✓ Save Protocol
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

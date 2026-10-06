@@ -18,7 +18,9 @@ import {
   PenaltyState,
   PenaltyDrillItem,
   PenaltyLedgerEvent,
-  SpecialQuest
+  SpecialQuest,
+  CustomQuestTargets,
+  DEFAULT_QUEST_TARGETS
 } from '../types';
 import { 
   calculateLevel, 
@@ -84,12 +86,12 @@ const INITIAL_ATTRIBUTE_XP: PlayerAttributesXP = {
   sen: 0,
 };
 
-const getInitialDailyQuests = (): QuestItem[] => [
+export const getInitialDailyQuests = (targets: CustomQuestTargets = DEFAULT_QUEST_TARGETS): QuestItem[] => [
   {
     id: 'pushups',
     name: 'Push-ups',
     category: 'physical',
-    target: 150,
+    target: targets.pushups,
     current: 0,
     unit: 'reps',
     icon: '💪',
@@ -102,7 +104,7 @@ const getInitialDailyQuests = (): QuestItem[] => [
     id: 'squats',
     name: 'Squats',
     category: 'physical',
-    target: 150,
+    target: targets.squats,
     current: 0,
     unit: 'reps',
     icon: '🦵',
@@ -115,7 +117,7 @@ const getInitialDailyQuests = (): QuestItem[] => [
     id: 'situps',
     name: 'Sit-ups',
     category: 'physical',
-    target: 100,
+    target: targets.situps,
     current: 0,
     unit: 'reps',
     icon: '🧘',
@@ -128,7 +130,7 @@ const getInitialDailyQuests = (): QuestItem[] => [
     id: 'pullups',
     name: 'Pull-ups',
     category: 'physical',
-    target: 30,
+    target: targets.pullups,
     current: 0,
     unit: 'reps',
     icon: '🧗',
@@ -141,7 +143,7 @@ const getInitialDailyQuests = (): QuestItem[] => [
     id: 'plank',
     name: 'Plank',
     category: 'physical',
-    target: 300, // 5 minutes = 300 seconds
+    target: targets.plank,
     current: 0,
     unit: 'seconds',
     icon: '⏱️',
@@ -154,7 +156,7 @@ const getInitialDailyQuests = (): QuestItem[] => [
     id: 'steps',
     name: 'Steps',
     category: 'physical',
-    target: 10000,
+    target: targets.steps,
     current: 0,
     unit: 'steps',
     icon: '🏃',
@@ -167,7 +169,7 @@ const getInitialDailyQuests = (): QuestItem[] => [
     id: 'study',
     name: 'Focused Study',
     category: 'study',
-    target: 60, // 1 hour = 60 minutes
+    target: targets.study,
     current: 0,
     unit: 'minutes',
     icon: '🧠',
@@ -190,9 +192,12 @@ export const BIRTHDAY_SPECIAL_QUEST: SpecialQuest = {
   isCompleted: false,
 };
 
-const getInitialDailyQuestState = (dateStr: string = getLocalDateKey()): DailyQuestState => ({
+const getInitialDailyQuestState = (
+  dateStr: string = getLocalDateKey(),
+  targets: CustomQuestTargets = DEFAULT_QUEST_TARGETS
+): DailyQuestState => ({
   date: dateStr,
-  quests: getInitialDailyQuests(),
+  quests: getInitialDailyQuests(targets),
   specialQuest: dateStr === '2026-09-10' ? { ...BIRTHDAY_SPECIAL_QUEST } : null,
   isAllCompleted: false,
   completionBonusClaimed: false,
@@ -228,9 +233,11 @@ interface SystemContextType {
   floatingXp: FloatingXpEvent[];
   levelProgress: LevelProgress;
   isMuted: boolean;
+  customTargets: CustomQuestTargets;
 
   // Actions
   toggleMute: () => void;
+  updateCustomTargets: (newTargets: Partial<CustomQuestTargets>) => void;
   awardXP: (amount: number, source: XPSource | string, date: string, label?: string) => boolean;
   awardAttributeXP: (attribute: AttributeKey, amount: number, source: string, date: string, label?: string) => boolean;
   addQuestProgress: (questId: QuestType, amount: number) => void;
@@ -271,27 +278,19 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return Array.isArray(saved?.penaltyLedger) ? saved.penaltyLedger : [];
   });
 
-  const [penaltyState, setPenaltyState] = useState<PenaltyState>(() => {
+  // Penalty Zone is disabled: always inactive to prevent lockdown/punishment
+  const [penaltyState, setPenaltyState] = useState<PenaltyState>(INITIAL_PENALTY_STATE);
+
+  const [customTargets, setCustomTargets] = useState<CustomQuestTargets>(() => {
     const saved = getStoredData();
-    if (saved?.penaltyState && typeof saved.penaltyState === 'object') {
-      const ps = saved.penaltyState;
-      if (ps.isActive) {
-        return {
-          isActive: true,
-          startTimestamp: ps.startTimestamp || Date.now(),
-          endTimestamp: null,
-          triggerDate: ps.triggerDate || todayKey,
-          drills: Array.isArray(ps.drills) && ps.drills.length === 7
-            ? ps.drills.map((d: PenaltyDrillItem) => {
-                if (d.id === 'steps' && d.target === 5000) return { ...d, target: 2000 };
-                if (d.id === 'study' && (d.target === 30 || d.target === 120)) return { ...d, target: 18 };
-                return d;
-              })
-            : getDefaultPenaltyDrills(),
-        };
-      }
+    if (saved?.customTargets && typeof saved.customTargets === 'object') {
+      return { ...DEFAULT_QUEST_TARGETS, ...saved.customTargets };
     }
-    return INITIAL_PENALTY_STATE;
+    try {
+      const stored = localStorage.getItem('solo_leveling_custom_targets');
+      if (stored) return { ...DEFAULT_QUEST_TARGETS, ...JSON.parse(stored) };
+    } catch {}
+    return DEFAULT_QUEST_TARGETS;
   });
 
   const [attributeXP, setAttributeXP] = useState<PlayerAttributesXP>(() => {
@@ -343,11 +342,9 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const saved = getStoredData();
     if (saved?.dailyQuest && typeof saved.dailyQuest.date === 'string' && Array.isArray(saved.dailyQuest.quests) && saved.dailyQuest.quests.length === 7) {
       const normalizedQuests = saved.dailyQuest.quests.map((q: QuestItem) => {
-        if (q.id === 'study') {
-          const isCompleted = q.current >= 60;
-          return { ...q, target: 60, isCompleted };
-        }
-        return q;
+        const target = customTargets[q.id] !== undefined ? customTargets[q.id] : q.target;
+        const isCompleted = q.current >= target;
+        return { ...q, target, isCompleted };
       });
       const isAllCompleted = normalizedQuests.every((q: QuestItem) => q.isCompleted);
       const isBirthdayProtocolDay = todayKey === '2026-09-10';
@@ -360,7 +357,7 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         isAllCompleted: isAllCompleted || saved.dailyQuest.isAllCompleted,
       };
     }
-    return getInitialDailyQuestState(todayKey);
+    return getInitialDailyQuestState(todayKey, customTargets);
   });
 
   const [floatingXp, setFloatingXp] = useState<FloatingXpEvent[]>([]);
@@ -398,12 +395,13 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         attributeTransactions,
         penaltyLedger,
         penaltyState,
+        customTargets,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
     } catch (e) {
       console.error('Failed to save to localStorage', e);
     }
-  }, [profile, attributeXP, dailyQuest, history, xpTransactions, attributeTransactions, penaltyLedger, penaltyState]);
+  }, [profile, attributeXP, dailyQuest, history, xpTransactions, attributeTransactions, penaltyLedger, penaltyState, customTargets]);
 
   const addNotification = useCallback((title: string, message: string, type: SystemNotification['type']) => {
     sound.playSystemChime();
@@ -429,82 +427,25 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const currentLocalToday = getLocalDateKey();
 
     if (dailyQuest.date < currentLocalToday) {
-      const missedRange = getMissedDateRange(dailyQuest.date, currentLocalToday);
-      const newPenaltyLedgerEvents: PenaltyLedgerEvent[] = [];
-      let activatedPenalty = false;
-      let lastTriggerDate = '';
+      sound.playQuestComplete();
+      const rolloverStreak = calculateCurrentStreak(history, currentLocalToday, false);
+      const rolloverBest = calculateBestStreak(history, currentLocalToday, false, profile.bestStreak);
+      setProfile(p => ({
+        ...p,
+        streakDays: rolloverStreak,
+        bestStreak: Math.max(p.bestStreak, rolloverBest),
+      }));
 
-      missedRange.forEach(dateKey => {
-        const isHistoricalRestDay = history.some(h => h.date === dateKey && h.isRestDay);
-        const isHistoricalCompleted = history.some(h => h.date === dateKey && h.completed);
-        const isCurrentQuestDay = dateKey === dailyQuest.date;
-        const isCurrentQuestSafe = isCurrentQuestDay && (dailyQuest.isAllCompleted || dailyQuest.isRestDay);
+      addNotification(
+        'NEW DAILY QUEST ARRIVED',
+        'Welcome to a new day, Hunter. Daily conditioning protocols have reset.',
+        'quest'
+      );
 
-        // A day was missed ONLY if it was NOT completed and NOT a rest day
-        if (!isHistoricalRestDay && !isHistoricalCompleted && !isCurrentQuestSafe) {
-          const penaltyId = `penalty:${dateKey}`;
-          const alreadyInLedger = penaltyLedger.some(e => e.id === penaltyId) || newPenaltyLedgerEvents.some(e => e.id === penaltyId);
-
-          if (!alreadyInLedger) {
-            newPenaltyLedgerEvents.push({
-              id: penaltyId,
-              date: dateKey,
-              timestamp: Date.now(),
-              reason: 'Daily conditioning quest incomplete at day boundary',
-            });
-            activatedPenalty = true;
-            lastTriggerDate = dateKey;
-          }
-        }
-      });
-
-      // Update Penalty Ledger & Profile if new penalties occurred
-      if (newPenaltyLedgerEvents.length > 0) {
-        sound.playPenaltySiren();
-        setPenaltyLedger(prev => [...newPenaltyLedgerEvents, ...prev]);
-
-        setProfile(p => ({
-          ...p,
-          streakDays: 0, // Reset streak on missed day
-          penaltyCount: p.penaltyCount + newPenaltyLedgerEvents.length,
-        }));
-
-        // Enforce active penalty state (escapable ONLY via 100% drill completion)
-        setPenaltyState({
-          isActive: true,
-          startTimestamp: Date.now(),
-          endTimestamp: null,
-          triggerDate: lastTriggerDate,
-          drills: getDefaultPenaltyDrills(),
-        });
-
-        addNotification(
-          'PENALTY ZONE ACTIVATED',
-          `${newPenaltyLedgerEvents.length} missed day(s) detected! Complete all 7 redemption drills to survive.`,
-          'penalty'
-        );
-      } else {
-        // Safe rollover (e.g. yesterday was completed or rest day)
-        sound.playQuestComplete();
-        const rolloverStreak = calculateCurrentStreak(history, currentLocalToday, false);
-        const rolloverBest = calculateBestStreak(history, currentLocalToday, false, profile.bestStreak);
-        setProfile(p => ({
-          ...p,
-          streakDays: rolloverStreak,
-          bestStreak: Math.max(p.bestStreak, rolloverBest),
-        }));
-
-        addNotification(
-          'NEW DAILY QUEST ARRIVED',
-          'Welcome to a new day, Hunter. Daily conditioning protocols have reset.',
-          'quest'
-        );
-      }
-
-      // Initialize clean 0-progress daily quest sheet for today
-      setDailyQuest(getInitialDailyQuestState(currentLocalToday));
+      // Initialize clean 0-progress daily quest sheet for today with custom targets
+      setDailyQuest(getInitialDailyQuestState(currentLocalToday, customTargets));
     }
-  }, [dailyQuest, history, penaltyLedger, profile.bestStreak, addNotification]);
+  }, [dailyQuest, history, profile.bestStreak, addNotification, customTargets]);
 
   // Periodic and on-focus rollover check
   useEffect(() => {
@@ -557,7 +498,7 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
    * 1. Global Hunter XP Engine (Idempotent)
    */
   const awardXP = (amount: number, source: XPSource | string, date: string, label: string = 'Quest'): boolean => {
-    if (amount <= 0 || penaltyState.isActive) return false;
+    if (amount <= 0) return false;
 
     const alreadyAwarded = xpTransactions.some(t => t.date === date && t.source === source);
     if (alreadyAwarded) {
@@ -616,7 +557,7 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     date: string, 
     label: string = 'Attribute'
   ): boolean => {
-    if (amount <= 0 || penaltyState.isActive) return false;
+    if (amount <= 0) return false;
 
     const alreadyAwarded = attributeTransactions.some(t => t.date === date && t.source === source);
     if (alreadyAwarded) {
@@ -665,7 +606,7 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Cumulative progress accumulator
   const addQuestProgress = (questId: QuestType, amount: number) => {
-    if (amount <= 0 || dailyQuest.isRestDay || penaltyState.isActive) return;
+    if (amount <= 0 || dailyQuest.isRestDay) return;
     const isUrgentActiveToday = getLocalDateKey() === '2026-09-10';
     if (dailyQuest.specialQuest && !dailyQuest.specialQuest.isCompleted && isUrgentActiveToday) {
       sound.playPenaltySiren();
@@ -815,6 +756,37 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         specialQuest: updatedSpecial,
       };
     });
+  };
+
+  const updateCustomTargets = (newTargets: Partial<CustomQuestTargets>) => {
+    const merged: CustomQuestTargets = { ...customTargets, ...newTargets };
+    setCustomTargets(merged);
+    try {
+      localStorage.setItem('solo_leveling_custom_targets', JSON.stringify(merged));
+    } catch (e) {
+      console.error('Failed to store custom targets', e);
+    }
+
+    setDailyQuest(prev => {
+      const updatedQuests = prev.quests.map(q => {
+        const newTarget = merged[q.id] !== undefined ? merged[q.id] : q.target;
+        const isCompleted = q.current >= newTarget;
+        return {
+          ...q,
+          target: newTarget,
+          isCompleted,
+        };
+      });
+      const isAllCompleted = updatedQuests.every(q => q.isCompleted);
+      return {
+        ...prev,
+        quests: updatedQuests,
+        isAllCompleted,
+      };
+    });
+
+    sound.playStatPoint();
+    addNotification('PROTOCOL RECALIBRATED', 'Daily conditioning targets updated successfully.', 'info');
   };
 
   const resetSpecialQuest = () => {
@@ -1010,7 +982,7 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const exportData = (): string => {
     const exportPayload = {
-      version: '3.3',
+      version: '3.4',
       exportedAt: new Date().toISOString(),
       profile,
       attributeXP,
@@ -1020,6 +992,7 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       attributeTransactions,
       penaltyLedger,
       penaltyState,
+      customTargets,
     };
     return JSON.stringify(exportPayload, null, 2);
   };
@@ -1038,8 +1011,15 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           : [];
 
         const currentLocalToday = getLocalDateKey();
-        let shouldActivatePenalty = false;
-        let lastTriggerDate = '';
+
+        // Restore custom targets if present in backup
+        if (parsed.customTargets && typeof parsed.customTargets === 'object') {
+          const merged = { ...DEFAULT_QUEST_TARGETS, ...parsed.customTargets };
+          setCustomTargets(merged);
+          try {
+            localStorage.setItem('solo_leveling_custom_targets', JSON.stringify(merged));
+          } catch {}
+        }
 
         if (parsed.dailyQuest) {
           const dq = parsed.dailyQuest;
@@ -1048,32 +1028,9 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             dq.isAllCompleted = dq.quests.every((q: QuestItem) => q.isCompleted) || dq.isAllCompleted;
           }
 
-          // If imported date is from a past calendar day, immediately scan for missed penalties
           if (dq.date < currentLocalToday) {
-            const missedRange = getMissedDateRange(dq.date, currentLocalToday);
-            missedRange.forEach(dateKey => {
-              const isHistoricalRest = Array.isArray(parsed.history) && parsed.history.some((h: any) => h.date === dateKey && h.isRestDay);
-              const isHistoricalCompleted = Array.isArray(parsed.history) && parsed.history.some((h: any) => h.date === dateKey && h.completed);
-              const isImportDay = dateKey === dq.date;
-              const isImportSafe = isImportDay && (dq.isAllCompleted || dq.isRestDay);
-
-              if (!isHistoricalRest && !isHistoricalCompleted && !isImportSafe) {
-                const penaltyId = `penalty:${dateKey}`;
-                if (!validPenaltyLedger.some(e => e.id === penaltyId)) {
-                  validPenaltyLedger.unshift({
-                    id: penaltyId,
-                    date: dateKey,
-                    timestamp: Date.now(),
-                    reason: 'Daily conditioning incomplete on imported past date',
-                  });
-                  shouldActivatePenalty = true;
-                  lastTriggerDate = dateKey;
-                }
-              }
-            });
-
             // Initialize clean daily quest sheet for today
-            setDailyQuest(getInitialDailyQuestState(currentLocalToday));
+            setDailyQuest(getInitialDailyQuestState(currentLocalToday, parsed.customTargets || customTargets));
           } else {
             setDailyQuest(dq);
           }
@@ -1081,10 +1038,10 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         const validHistory = Array.isArray(parsed.history) ? parsed.history : [];
         const finalDQ = parsed.dailyQuest?.date < currentLocalToday 
-          ? getInitialDailyQuestState(currentLocalToday) 
-          : (parsed.dailyQuest || getInitialDailyQuestState(currentLocalToday));
+          ? getInitialDailyQuestState(currentLocalToday, parsed.customTargets || customTargets) 
+          : (parsed.dailyQuest || getInitialDailyQuestState(currentLocalToday, parsed.customTargets || customTargets));
         const isImportSafe = finalDQ ? (finalDQ.isAllCompleted || finalDQ.isRestDay) : false;
-        const importStreak = shouldActivatePenalty ? 0 : calculateCurrentStreak(validHistory, finalDQ.date, isImportSafe);
+        const importStreak = calculateCurrentStreak(validHistory, finalDQ.date, isImportSafe);
         const importBest = calculateBestStreak(validHistory, finalDQ.date, isImportSafe, parsed.profile?.bestStreak || 0);
 
         setProfile({
@@ -1102,32 +1059,8 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (Array.isArray(parsed.xpTransactions)) setXpTransactions(parsed.xpTransactions);
         if (Array.isArray(parsed.attributeTransactions)) setAttributeTransactions(parsed.attributeTransactions);
 
-        if (shouldActivatePenalty) {
-          sound.playPenaltySiren();
-          setPenaltyState({
-            isActive: true,
-            startTimestamp: Date.now(),
-            endTimestamp: null,
-            triggerDate: lastTriggerDate,
-            drills: getDefaultPenaltyDrills(),
-          });
-          addNotification(
-            'PENALTY ZONE ACTIVATED',
-            'Imported past missed day detected! Complete all 7 redemption drills to survive.',
-            'penalty'
-          );
-        } else if (parsed.penaltyState && typeof parsed.penaltyState.isActive === 'boolean') {
-          const ps = parsed.penaltyState;
-          if (Array.isArray(ps.drills)) {
-            ps.drills = ps.drills.map((d: PenaltyDrillItem) => {
-              if (d.id === 'steps' && d.target === 5000) return { ...d, target: 2000 };
-              if (d.id === 'study' && (d.target === 30 || d.target === 120)) return { ...d, target: 18 };
-              return d;
-            });
-          }
-          ps.endTimestamp = null;
-          setPenaltyState(ps);
-        }
+        // Always keep penalty state inactive
+        setPenaltyState(INITIAL_PENALTY_STATE);
 
         sound.playQuestComplete();
         addNotification('BACKUP RESTORED', 'Your Hunter state and stats have been loaded!', 'reward');
@@ -1158,6 +1091,8 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         levelProgress,
         isMuted,
         toggleMute,
+        customTargets,
+        updateCustomTargets,
         awardXP,
         awardAttributeXP,
         addQuestProgress,

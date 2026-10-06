@@ -51,11 +51,31 @@ export type QuestType =
   | 'steps' 
   | 'study';
 
+export interface CustomQuestTargets {
+  pushups: number;
+  squats: number;
+  situps: number;
+  pullups: number;
+  plank: number; // in seconds
+  steps: number;
+  study: number; // in minutes
+}
+
+export const DEFAULT_QUEST_TARGETS: CustomQuestTargets = {
+  pushups: 50,
+  squats: 50,
+  situps: 30,
+  pullups: 10,
+  plank: 60, // 1 minute
+  steps: 5000,
+  study: 30, // 30 minutes
+};
+
 export interface QuestItem {
   id: QuestType;
   name: string;
   category: 'physical' | 'study';
-  target: number; // Pushups: 150, Squats: 150, Situps: 100, Pullups: 30, Plank: 300, Steps: 10000, Study: 60
+  target: number;
   current: number;
   unit: string;
   icon: string;
