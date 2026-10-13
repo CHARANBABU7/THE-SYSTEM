@@ -35,12 +35,14 @@ export const DailyQuest: React.FC = () => {
     profile,
     floatingXp,
     customTargets,
-    updateCustomTargets
+    updateCustomTargets,
+    repairStreak
   } = useSystem();
 
   // Custom Protocol Goals Modal State
   const [showTargetModal, setShowTargetModal] = useState<boolean>(false);
   const [tempTargets, setTempTargets] = useState<CustomQuestTargets>(customTargets);
+  const [streakInput, setStreakInput] = useState<number>(profile.streakDays || 7);
 
   // Scroller Modal State
   const [activeModalQuest, setActiveModalQuest] = useState<QuestItem | null>(null);
@@ -1078,6 +1080,37 @@ export const DailyQuest: React.FC = () => {
                     </div>
                   );
                 })}
+              </div>
+
+              {/* Streak Recovery Tool */}
+              <div className="pt-2 border-t border-white/[0.06] space-y-2">
+                <span className="text-[10px] font-mono uppercase tracking-widest text-amber-400/90 flex items-center space-x-1">
+                  <Flame className="w-3 h-3 text-amber-400" />
+                  <span>Streak Recovery Tool</span>
+                </span>
+                <div className="p-2.5 rounded-xl bg-amber-950/20 border border-amber-500/25 flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-semibold text-amber-200">Active Streak Days</div>
+                    <div className="text-[9px] font-mono text-zinc-400">Restore or calibrate consecutive days</div>
+                  </div>
+                  <div className="flex items-center space-x-1.5">
+                    <input
+                      type="number"
+                      min="1"
+                      max="365"
+                      value={streakInput === 0 ? '' : streakInput}
+                      onChange={e => setStreakInput(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      className="w-14 py-1 text-center text-xs font-mono font-bold text-amber-300 bg-black/80 border border-amber-500/40 rounded-lg focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => repairStreak(streakInput)}
+                      className="px-2.5 py-1 text-xs font-mono font-bold text-black bg-amber-400 hover:bg-amber-300 rounded-lg active:scale-95 transition-all shadow-sm"
+                    >
+                      Set
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 

@@ -33,7 +33,8 @@ import {
   getLocalDateKey, 
   getMissedDateRange, 
   calculateCurrentStreak, 
-  calculateBestStreak 
+  calculateBestStreak,
+  addDaysToDateKey
 } from '../utils/dateUtils';
 import { sound } from '../utils/audio';
 
@@ -238,6 +239,7 @@ interface SystemContextType {
   // Actions
   toggleMute: () => void;
   updateCustomTargets: (newTargets: Partial<CustomQuestTargets>) => void;
+  repairStreak: (newStreak: number) => void;
   awardXP: (amount: number, source: XPSource | string, date: string, label?: string) => boolean;
   awardAttributeXP: (attribute: AttributeKey, amount: number, source: string, date: string, label?: string) => boolean;
   addQuestProgress: (questId: QuestType, amount: number) => void;
@@ -428,8 +430,52 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     if (dailyQuest.date < currentLocalToday) {
       sound.playQuestComplete();
-      const rolloverStreak = calculateCurrentStreak(history, currentLocalToday, false);
-      const rolloverBest = calculateBestStreak(history, currentLocalToday, false, profile.bestStreak);
+
+      // AUTO-PRESERVE: If yesterday's quests were completed, ensure history is preserved even if claim bonus wasn't tapped!
+      const wasAllCompleted = dailyQuest.isAllCompleted || dailyQuest.quests.every(q => q.isCompleted);
+      let activeHistory = [...history];
+
+      if (wasAllCompleted) {
+        if (!dailyQuest.completionBonusClaimed) {
+          setProfile(p => {
+            const nextXP = p.totalXP + 300;
+            const nextLvl = calculateLevel(nextXP);
+            return {
+              ...p,
+              totalXP: nextXP,
+              currentLevel: nextLvl,
+              rank: calculateHunterRank(nextLvl),
+            };
+          });
+          setAttributeXP(prev => ({
+            ...prev,
+            sen: prev.sen + 100,
+          }));
+        }
+
+        const autoEntry: HistoryEntry = {
+          date: dailyQuest.date,
+          completed: true,
+          pushups: dailyQuest.quests.find(q => q.id === 'pushups')?.current || customTargets.pushups,
+          squats: dailyQuest.quests.find(q => q.id === 'squats')?.current || customTargets.squats,
+          situps: dailyQuest.quests.find(q => q.id === 'situps')?.current || customTargets.situps,
+          pullups: dailyQuest.quests.find(q => q.id === 'pullups')?.current || customTargets.pullups,
+          plankSeconds: dailyQuest.quests.find(q => q.id === 'plank')?.current || customTargets.plank,
+          steps: dailyQuest.quests.find(q => q.id === 'steps')?.current || customTargets.steps,
+          studyMinutes: dailyQuest.quests.find(q => q.id === 'study')?.current || customTargets.study,
+        };
+
+        const existingIdx = activeHistory.findIndex(h => h.date === dailyQuest.date);
+        if (existingIdx >= 0) {
+          activeHistory[existingIdx] = { ...activeHistory[existingIdx], completed: true };
+        } else {
+          activeHistory.unshift(autoEntry);
+        }
+        setHistory(activeHistory);
+      }
+
+      const rolloverStreak = calculateCurrentStreak(activeHistory, currentLocalToday, false);
+      const rolloverBest = calculateBestStreak(activeHistory, currentLocalToday, false, profile.bestStreak);
       setProfile(p => ({
         ...p,
         streakDays: rolloverStreak,
@@ -458,6 +504,79 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       window.removeEventListener('focus', processMissedDaysAndRollover);
     };
   }, [processMissedDaysAndRollover]);
+
+  // ONE-TIME AUTOMATIC SELF-HEALING: Restores October 10th Marathon Study (200 min / 3h 20m) & 7-Day Unbroken Streak on Mobile
+  useEffect(() => {
+    const MIGRATION_FLAG = 'solo_system_oct10_streak_recovery_v1';
+    if (localStorage.getItem(MIGRATION_FLAG)) return;
+
+    const datesToRestore = [
+      '2026-10-07',
+      '2026-10-08',
+      '2026-10-09',
+      '2026-10-10',
+      '2026-10-11',
+      '2026-10-12',
+    ];
+
+    setHistory(prevHistory => {
+      const nextHistory = [...prevHistory];
+
+      datesToRestore.forEach(d => {
+        const isOct10 = d === '2026-10-10';
+        const existingIdx = nextHistory.findIndex(h => h.date === d);
+        const entry: HistoryEntry = {
+          date: d,
+          completed: true,
+          pushups: customTargets.pushups,
+          squats: customTargets.squats,
+          situps: customTargets.situps,
+          pullups: customTargets.pullups,
+          plankSeconds: customTargets.plank,
+          steps: customTargets.steps,
+          studyMinutes: isOct10 ? 200 : customTargets.study, // 200 mins (3h 20m) marathon study session!
+        };
+
+        if (existingIdx >= 0) {
+          nextHistory[existingIdx] = {
+            ...nextHistory[existingIdx],
+            completed: true,
+            ...(isOct10 ? { studyMinutes: Math.max(nextHistory[existingIdx].studyMinutes || 0, 200) } : {}),
+          };
+        } else {
+          nextHistory.push(entry);
+        }
+      });
+
+      nextHistory.sort((a, b) => b.date.localeCompare(a.date));
+      return nextHistory;
+    });
+
+    setProfile(p => ({
+      ...p,
+      streakDays: Math.max(p.streakDays, 7),
+      bestStreak: Math.max(p.bestStreak, 7),
+      lifetimeStudyMinutes: p.lifetimeStudyMinutes + 200,
+      totalXP: p.totalXP + 300,
+      totalDailyQuestsCompleted: Math.max(p.totalDailyQuestsCompleted, p.totalDailyQuestsCompleted + 1),
+    }));
+
+    setAttributeXP(prev => ({
+      ...prev,
+      int: prev.int + 200,
+    }));
+
+    localStorage.setItem(MIGRATION_FLAG, 'true');
+
+    setTimeout(() => {
+      sound.playLevelUp();
+      addNotification(
+        'PROTOCOL RESTORED',
+        'October 10th (3h 20m Study Session) logged & 7-Day Streak Restored!',
+        'reward'
+      );
+    }, 1200);
+  }, [customTargets, addNotification]);
 
   const toggleMute = () => {
     const nextMute = !isMuted;
@@ -686,6 +805,29 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             'quest'
           );
         }, 400);
+
+        // Auto-secure in history immediately so streak is never lost
+        setHistory(prevHistory => {
+          const entry: HistoryEntry = {
+            date: prev.date,
+            completed: true,
+            pushups: updatedQuests.find(q => q.id === 'pushups')?.current || 0,
+            squats: updatedQuests.find(q => q.id === 'squats')?.current || 0,
+            situps: updatedQuests.find(q => q.id === 'situps')?.current || 0,
+            pullups: updatedQuests.find(q => q.id === 'pullups')?.current || 0,
+            plankSeconds: updatedQuests.find(q => q.id === 'plank')?.current || 0,
+            steps: updatedQuests.find(q => q.id === 'steps')?.current || 0,
+            studyMinutes: updatedQuests.find(q => q.id === 'study')?.current || 0,
+          };
+          const existingIdx = prevHistory.findIndex(h => h.date === prev.date);
+          const next = [...prevHistory];
+          if (existingIdx >= 0) {
+            next[existingIdx] = { ...next[existingIdx], completed: true };
+          } else {
+            next.unshift(entry);
+          }
+          return next;
+        });
       }
 
       return {
@@ -787,6 +929,46 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     sound.playStatPoint();
     addNotification('PROTOCOL RECALIBRATED', 'Daily conditioning targets updated successfully.', 'info');
+  };
+
+  const repairStreak = (newStreak: number) => {
+    if (newStreak <= 0) return;
+    const currentLocalToday = getLocalDateKey();
+
+    setHistory(prevHistory => {
+      const nextHistory = [...prevHistory];
+      for (let i = 1; i <= newStreak; i++) {
+        const targetDate = addDaysToDateKey(currentLocalToday, -i);
+        const existingIdx = nextHistory.findIndex(h => h.date === targetDate);
+        const entry: HistoryEntry = {
+          date: targetDate,
+          completed: true,
+          pushups: customTargets.pushups,
+          squats: customTargets.squats,
+          situps: customTargets.situps,
+          pullups: customTargets.pullups,
+          plankSeconds: customTargets.plank,
+          steps: customTargets.steps,
+          studyMinutes: customTargets.study,
+        };
+        if (existingIdx >= 0) {
+          nextHistory[existingIdx] = { ...nextHistory[existingIdx], completed: true };
+        } else {
+          nextHistory.push(entry);
+        }
+      }
+      nextHistory.sort((a, b) => b.date.localeCompare(a.date));
+      return nextHistory;
+    });
+
+    setProfile(p => ({
+      ...p,
+      streakDays: newStreak,
+      bestStreak: Math.max(p.bestStreak, newStreak),
+    }));
+
+    sound.playQuestComplete();
+    addNotification('STREAK RECALIBRATED', `Active streak successfully calibrated to ${newStreak} days.`, 'reward');
   };
 
   const resetSpecialQuest = () => {
@@ -1093,6 +1275,7 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         toggleMute,
         customTargets,
         updateCustomTargets,
+        repairStreak,
         awardXP,
         awardAttributeXP,
         addQuestProgress,
